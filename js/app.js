@@ -744,6 +744,9 @@ function renderGameOver(data) {
   show('view-end');
   const isGoodWin = data.winner === 'good';
 
+  // 优先用 data.players（引擎传入完整角色信息），fallback 到 store
+  const players = data.players || store.state.players;
+
   html('#end-content', `
     <div class="game-over ${isGoodWin ? 'good-wins' : 'evil-wins'}">
       <h1>${isGoodWin ? '💧 清流派胜利!' : '👑 渣王称霸!'}</h1>
@@ -751,8 +754,9 @@ function renderGameOver(data) {
 
       <h3 class="mt-24">角色揭晓</h3>
       <div class="flex-col gap-8 mt-16">
-        ${store.state.players.map(p => {
+        ${players.map(p => {
           const role = ROLES[p.roleId];
+          if (!role) return '';
           const faction = FACTION_INFO[role.faction];
           return `
             <div class="player-item ${p.alive ? '' : 'dead'}">

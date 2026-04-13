@@ -126,13 +126,13 @@ async function runBrowserTest(targetTotal) {
 
     // 7. 自动交互走完游戏
     log('  [7] 游戏进行中...');
-    const maxSeconds = targetTotal >= 10 ? 300 : 180;
+    const maxSeconds = targetTotal >= 10 ? 360 : 240;
     let phasesSeenWithContent = new Set();
 
     for (let i = 0; i < maxSeconds; i++) {
       if (consoleLogs.some(l => l.includes('游戏结束'))) break;
 
-      if (i % 2 === 0) {
+      if (i % 1 === 0) { // 每秒尝试交互
         // 记录当前视图状态
         const v = await getActiveView(page);
         if (v && v.text.length > 5) phasesSeenWithContent.add(v.id);
