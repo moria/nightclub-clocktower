@@ -64,17 +64,23 @@ class TestClient {
 
   _connectWS() {
     return new Promise((resolve, reject) => {
+      let joined = false;
+      const joinRef = String(++this.ref);
       this.ws = new WebSocket(`${SUPABASE_URL.replace('https://', 'wss://')}/realtime/v1/websocket?apikey=${ANON_KEY}&vsn=1.0.0`);
       this.ws.on('open', () => {
-        this._send({ topic: this.topic, event: 'phx_join', payload: { config: { broadcast: { self: true } } }, ref: String(++this.ref) });
+        this._send({ topic: this.topic, event: 'phx_join', payload: { config: { broadcast: { self: true } } }, ref: joinRef });
         this._heartbeat = setInterval(() => {
           this._send({ topic: 'phoenix', event: 'heartbeat', payload: {}, ref: String(++this.ref) });
         }, 30000);
-        resolve();
       });
       this.ws.on('message', (data) => {
         try {
           const msg = JSON.parse(data.toString());
+          // channel join 确认
+          if (msg.event === 'phx_reply' && msg.ref === joinRef && !joined) {
+            joined = true;
+            resolve();
+          }
           if (msg.event === 'broadcast' && msg.payload) {
             const evt = msg.payload.event;
             const pl = msg.payload.payload;
@@ -90,7 +96,7 @@ class TestClient {
         } catch (e) {}
       });
       this.ws.on('error', (e) => reject(e));
-      setTimeout(() => resolve(), 5000); // fallback if join ack never comes
+      setTimeout(() => { if (!joined) resolve(); }, 5000); // fallback
     });
   }
 

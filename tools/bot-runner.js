@@ -74,6 +74,16 @@ function sendToPlayer(playerId, event, payload) {
 
 // ============ Main ============
 async function main() {
+  // 0. 清理残留数据（上次异常退出可能留下的）
+  try {
+    const staleRooms = await supaFetch('rooms?host_id=eq.server&select=id');
+    for (const r of staleRooms) {
+      await supaFetch(`players?room_id=eq.${r.id}`, { method: 'DELETE', headers: { 'Prefer': '' } });
+      await supaFetch(`rooms?id=eq.${r.id}`, { method: 'DELETE', headers: { 'Prefer': '' } });
+    }
+    if (staleRooms.length > 0) log(`🧹 清理了 ${staleRooms.length} 个残留房间`);
+  } catch (e) { /* 忽略清理失败 */ }
+
   game.roomCode = genCode();
   topic = `realtime:room:${game.roomCode}`;
 
