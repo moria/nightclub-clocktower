@@ -46,10 +46,17 @@ export class HostEngine {
 
   broadcast(event, payload) {
     supabase.broadcastToRoom(store.state.roomCode, event, payload);
+    // 同时直接触发本地 handler（不依赖 WS 回程）
+    if (this._localHandler) this._localHandler(event, payload);
   }
 
   sendToPlayer(playerId, event, payload) {
     this.broadcast(event, { ...payload, _targetPlayerId: playerId });
+  }
+
+  /** 注册本地事件处理（由 app.js 调用，让 host 端事件立即生效） */
+  onLocalEvent(handler) {
+    this._localHandler = handler;
   }
 
   getPlayer(id) { return this.players.find(p => p.id === id); }

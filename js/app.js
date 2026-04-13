@@ -129,6 +129,10 @@ function bindEvents() {
     if (startBtn) startBtn.disabled = true;
 
     hostEngine = new HostEngine();
+    // 注册本地事件处理，让 host 端事件绕过 WS 回程直接渲染
+    hostEngine.onLocalEvent((event, payload) => {
+      handleRoomEvent(event, payload);
+    });
     try {
       await hostEngine.start(targetCount, (msg) => console.log(msg));
     } catch (e) {
@@ -152,102 +156,101 @@ function shouldIgnore(data) {
   return data._targetPlayerId && data._targetPlayerId !== store.state.myPlayerId;
 }
 
-function subscribeRoom(code) {
-  supabase.connect();
-  supabase.subscribeRoom(code, {
-    'player_joined': (data) => {
+/** 统一事件处理（WS回调和本地引擎共用） */
+function handleRoomEvent(event, data) {
+  switch (event) {
+    case 'player_joined':
       if (!store.state.players.find(p => p.id === data.id)) {
         store.state.players.push({
-          id: data.id,
-          name: data.name,
-          roleId: null,
-          alive: true,
-          infected: false,
-          ghostVoteUsed: false,
-          connected: true,
-          seatIndex: data.seatIndex,
+          id: data.id, name: data.name, roleId: null,
+          alive: true, infected: false, ghostVoteUsed: false,
+          connected: true, seatIndex: data.seatIndex,
         });
         store._notify();
         store._persist();
       }
-    },
-
-    'phase_change': (data) => {
+      break;
+    case 'phase_change':
       store.update({ phase: data.phase });
       if (data.dayNumber !== undefined) store.updateNested('dayNumber', data.dayNumber);
       if (data.announcements) store.updateNested('dayState.announcements', data.announcements);
       if (data.alivePlayers) {
-        // 同步存活状态
         for (const ap of data.alivePlayers) {
           const p = store.getPlayer(ap.id);
           if (p) p.alive = ap.alive;
         }
         store._notify();
       }
-    },
-
-    'role_assigned': (data) => {
+      break;
+    case 'role_assigned':
       if (shouldIgnore(data)) return;
       if (data.playerId === store.state.myPlayerId) {
         const me = store.getMyPlayer();
         if (me) me.roleId = data.roleId;
         store._notify();
       }
-    },
-
-    'dating_prompt': (data) => {
+      break;
+    case 'dating_prompt':
       if (shouldIgnore(data)) return;
       renderDatingPrompt(data);
-    },
-
-    'night_action_prompt': (data) => {
+      break;
+    case 'night_action_prompt':
       if (shouldIgnore(data)) return;
       renderNightActionPrompt(data);
-    },
-
-    'night_results': (data) => {
+      break;
+    case 'night_results':
       if (shouldIgnore(data)) return;
       renderNightResults(data.messages);
-    },
-
-    'evil_reveal': (data) => {
+      break;
+    case 'evil_reveal':
       if (shouldIgnore(data)) return;
       renderEvilReveal(data);
-    },
-
-    'vote_start': (data) => {
+      break;
+    case 'vote_start':
       renderVotePanel(data);
-    },
-
-    'vote_update': (data) => {
+      break;
+    case 'vote_update':
       updateVoteDisplay(data);
-    },
-
-    'execution': (data) => {
+      break;
+    case 'execution':
       renderExecution(data);
-    },
-
-    'acquittal': (data) => {
+      break;
+    case 'acquittal':
       renderAcquittal(data);
-    },
-
-    'game_over': (data) => {
+      break;
+    case 'game_over':
       store.update({ phase: PHASE.END });
       renderGameOver(data);
-    },
-
-    'cu_kou_reveal': (data) => {
+      break;
+    case 'cu_kou_reveal':
       renderCuKouReveal(data);
-    },
-
-    'zuo_jing_tantrum': (data) => {
+      break;
+    case 'zuo_jing_tantrum':
       renderZuoJingTantrum(data);
-    },
+      break;
+  }
+}
 
+function subscribeRoom(code) {
+  supabase.connect();
+
+  // WS 回调：如果 hostEngine 在运行，跳过渲染类事件（已由本地 handler 处理）
+  // 但仍需转发玩家操作给 hostEngine（dating_choice, night_action, vote_cast）
+  const wsHandler = (event, data) => {
+    if (hostEngine?.running) {
+      // 房主端：本地 handler 已处理渲染事件，WS 回程只负责转发玩家操作给引擎
+      hostEngine.handleEvent(event, data);
+      return;
+    }
+    // 非房主端：正常处理所有事件
+    handleRoomEvent(event, data);
+  };
+
+  supabase.subscribeRoom(code, {
+    'player_joined': (data) => handleRoomEvent('player_joined', data), // 始终处理（加人需要更新列表）
     '*': (event, payload) => {
       console.log(`[Room] ${event}:`, payload);
-      // 转发给房主引擎（如果在运行）
-      if (hostEngine?.running) hostEngine.handleEvent(event, payload);
+      wsHandler(event, payload);
     },
   });
 }
