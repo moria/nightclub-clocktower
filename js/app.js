@@ -1,14 +1,8 @@
-// 夜店钟楼 - 应用入口 + 视图路由
+// 夜店钟楼 - 薄客户端（纯UI + 广播通信，游戏逻辑由服务端驱动）
 
-import { ROLES, FACTION_INFO, assignRoles } from './roles.js';
+import { ROLES, FACTION_INFO } from './roles.js';
 import { store, PHASE } from './game-state.js';
-import { NightEngine } from './night-engine.js';
-import { VoteEngine } from './vote-engine.js';
-import { supabase, initSupabase } from './supabase-client.js';
-
-// ============ 全局引擎实例 ============
-let nightEngine = null;
-let voteEngine = null;
+import { supabase } from './supabase-client.js';
 
 // ============ DOM 工具 ============
 const $ = (sel) => document.querySelector(sel);
@@ -109,14 +103,20 @@ function bindEvents() {
     }
   });
 
-  // 开始游戏（房主）
+  // 开始游戏（房主） — 通知服务端启动
   $('#btn-start')?.addEventListener('click', () => {
     if (!store.isHost()) return;
     const players = store.state.players;
     if (players.length < 5) return alert('至少需要5名玩家');
     if (players.length > 15) return alert('最多支持15名玩家');
 
-    startGame();
+    supabase.broadcastToRoom(store.state.roomCode, 'request_start', {
+      hostId: store.state.hostId,
+      playerCount: players.length,
+    });
+    // UI 等待服务端 phase_change 响应
+    html('#btn-start', '⏳ 等待服务器...');
+    $('#btn-start').disabled = true;
   });
 
   // 新游戏
@@ -127,6 +127,12 @@ function bindEvents() {
 }
 
 // ============ 房间订阅 ============
+
+/** 过滤定向消息：如果消息带 _targetPlayerId 且不是发给自己的，返回 true（应忽略） */
+function shouldIgnore(data) {
+  return data._targetPlayerId && data._targetPlayerId !== store.state.myPlayerId;
+}
+
 function subscribeRoom(code) {
   supabase.connect();
   supabase.subscribeRoom(code, {
@@ -149,12 +155,20 @@ function subscribeRoom(code) {
 
     'phase_change': (data) => {
       store.update({ phase: data.phase });
-      if (data.announcements) {
-        store.updateNested('dayState.announcements', data.announcements);
+      if (data.dayNumber !== undefined) store.updateNested('dayNumber', data.dayNumber);
+      if (data.announcements) store.updateNested('dayState.announcements', data.announcements);
+      if (data.alivePlayers) {
+        // 同步存活状态
+        for (const ap of data.alivePlayers) {
+          const p = store.getPlayer(ap.id);
+          if (p) p.alive = ap.alive;
+        }
+        store._notify();
       }
     },
 
     'role_assigned': (data) => {
+      if (shouldIgnore(data)) return;
       if (data.playerId === store.state.myPlayerId) {
         const me = store.getMyPlayer();
         if (me) me.roleId = data.roleId;
@@ -163,18 +177,22 @@ function subscribeRoom(code) {
     },
 
     'dating_prompt': (data) => {
+      if (shouldIgnore(data)) return;
       renderDatingPrompt(data);
     },
 
     'night_action_prompt': (data) => {
+      if (shouldIgnore(data)) return;
       renderNightActionPrompt(data);
     },
 
     'night_results': (data) => {
+      if (shouldIgnore(data)) return;
       renderNightResults(data.messages);
     },
 
     'evil_reveal': (data) => {
+      if (shouldIgnore(data)) return;
       renderEvilReveal(data);
     },
 
@@ -195,6 +213,7 @@ function subscribeRoom(code) {
     },
 
     'game_over': (data) => {
+      store.update({ phase: PHASE.END });
       renderGameOver(data);
     },
 
@@ -212,39 +231,7 @@ function subscribeRoom(code) {
   });
 }
 
-// ============ 游戏启动 ============
-function startGame() {
-  const players = store.state.players;
-  const roles = assignRoles(players.length);
-
-  // 分配角色
-  players.forEach((p, i) => {
-    p.roleId = roles[i];
-    p.infected = ROLES[roles[i]].isInfected || false;
-  });
-
-  // 初始化引擎
-  nightEngine = new NightEngine(
-    (event, data) => supabase.broadcastToRoom(store.state.roomCode, event, data),
-    (playerId, event, data) => supabase.broadcastToRoom(store.state.roomCode, event, { ...data, playerId }),
-  );
-
-  voteEngine = new VoteEngine(
-    (event, data) => supabase.broadcastToRoom(store.state.roomCode, event, data),
-    (playerId, event, data) => supabase.broadcastToRoom(store.state.roomCode, event, { ...data, playerId }),
-  );
-
-  // 通知每个玩家角色
-  for (const p of players) {
-    supabase.broadcastToRoom(store.state.roomCode, 'role_assigned', {
-      playerId: p.id,
-      roleId: p.roleId,
-    });
-  }
-
-  store.update({ phase: PHASE.ROLE_REVEAL });
-  supabase.broadcastToRoom(store.state.roomCode, 'phase_change', { phase: PHASE.ROLE_REVEAL });
-}
+// ============ 游戏启动由服务端驱动，客户端无需本地引擎 ============
 
 // ============ 视图渲染 ============
 
@@ -356,15 +343,11 @@ window._selectDate = (targetId) => {
     </div>
   `);
 
-  // 提交约会选择
-  if (nightEngine) {
-    nightEngine.submitDatingChoice(store.state.myPlayerId, targetId);
-  } else {
-    supabase.broadcastToRoom(store.state.roomCode, 'dating_choice', {
-      playerId: store.state.myPlayerId,
-      targetId,
-    });
-  }
+  // 提交约会选择到服务端
+  supabase.broadcastToRoom(store.state.roomCode, 'dating_choice', {
+    playerId: store.state.myPlayerId,
+    targetId,
+  });
 };
 
 function renderNightActionPrompt(data) {
@@ -438,14 +421,11 @@ window._submitAction = (targets) => {
     </div>
   `);
 
-  if (nightEngine) {
-    nightEngine.submitNightAction(store.state.myPlayerId, targets);
-  } else {
-    supabase.broadcastToRoom(store.state.roomCode, 'night_action', {
-      playerId: store.state.myPlayerId,
-      targets,
-    });
-  }
+  // 提交夜间行动到服务端
+  supabase.broadcastToRoom(store.state.roomCode, 'night_action', {
+    playerId: store.state.myPlayerId,
+    targets,
+  });
 };
 
 function renderNightResults(messages) {
@@ -558,10 +538,10 @@ function renderDay() {
 }
 
 window._nominateTarget = (targetId) => {
-  if (voteEngine) {
-    voteEngine.nominate(store.state.myPlayerId, targetId);
-    voteEngine.startVote(targetId);
-  }
+  supabase.broadcastToRoom(store.state.roomCode, 'nominate', {
+    playerId: store.state.myPlayerId,
+    targetId,
+  });
 };
 
 window._useCuKou = () => {
@@ -581,21 +561,23 @@ window._useCuKou = () => {
 };
 
 window._confirmCuKou = (targetId) => {
-  if (voteEngine) {
-    voteEngine.useCuKou(store.state.myPlayerId, targetId);
-  }
+  supabase.broadcastToRoom(store.state.roomCode, 'use_cu_kou', {
+    playerId: store.state.myPlayerId,
+    targetId,
+  });
 };
 
 window._useZuoJing = () => {
-  if (voteEngine && voteEngine.useZuoJing(store.state.myPlayerId)) {
-    // 直接进入夜晚
-    nightEngine?.startNight();
-  }
+  supabase.broadcastToRoom(store.state.roomCode, 'use_zuo_jing', {
+    playerId: store.state.myPlayerId,
+  });
 };
 
 window._goToNight = () => {
-  if (store.isHost() && nightEngine) {
-    nightEngine.startNight();
+  if (store.isHost()) {
+    supabase.broadcastToRoom(store.state.roomCode, 'request_next_night', {
+      hostId: store.state.myPlayerId,
+    });
   }
 };
 
@@ -620,9 +602,10 @@ function renderVotePanel(data) {
 }
 
 window._castVote = (inFavor) => {
-  if (voteEngine) {
-    voteEngine.castVote(store.state.myPlayerId, inFavor);
-  }
+  supabase.broadcastToRoom(store.state.roomCode, 'vote_cast', {
+    playerId: store.state.myPlayerId,
+    inFavor,
+  });
   html('#vote-content', `
     <div class="waiting">
       <div class="spinner"></div>

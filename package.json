@@ -1,0 +1,24 @@
+{
+  "name": "nightclub-clocktower",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/moria/nightclub-clocktower.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/moria/nightclub-clocktower/issues"
+  },
+  "homepage": "https://github.com/moria/nightclub-clocktower#readme",
+  "dependencies": {
+    "ws": "^8.20.0"
+  }
+}

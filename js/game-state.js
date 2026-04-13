@@ -173,15 +173,14 @@ class GameStore {
     const aliveGood = this.getAliveGoodPlayers();
     const aliveEvil = this.getAliveEvilPlayers();
 
-    // 恶方减员胜利：存活好人 <= 2
-    if (aliveGood.length <= 2) {
-      return { winner: 'evil', reason: '好人存活不足，渣王称霸夜店！' };
+    // 恶方人数 >= 好人人数 → 恶方胜（数量压制）
+    if (aliveEvil.length >= aliveGood.length && aliveEvil.length > 0) {
+      return { winner: 'evil', reason: '恶方势力压过好人，渣王称霸夜店！' };
     }
 
     // 检查渣王是否全部被处决
     const aliveScum = alive.filter(p => ROLES[p.roleId].faction === FACTION.SCUM);
     if (aliveScum.length === 0) {
-      // 好人处决了所有渣王，但检查感染否决
       const infectedGood = this.getInfectedGoodCount();
       const totalGood = aliveGood.length;
       if (infectedGood >= Math.ceil(totalGood / 2)) {
