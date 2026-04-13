@@ -25,10 +25,26 @@ function html(el, content) {
 
 // ============ 初始化 ============
 document.addEventListener('DOMContentLoaded', () => {
-  // 尝试恢复状态
+  // URL hash 清除缓存
+  if (location.hash === '#clear') {
+    store.reset();
+    location.hash = '';
+  }
+
+  // 尝试恢复状态（仅当游戏仍可继续时）
   if (store.restore()) {
-    console.log('游戏状态已恢复');
-    renderCurrentPhase();
+    const phase = store.state.phase;
+    const hasRoom = !!store.state.roomCode;
+    const hasPlayers = store.state.players.length > 0;
+    // 如果状态不完整或游戏已结束，重置回首页
+    if (!hasRoom || !hasPlayers || phase === 'end') {
+      console.log('旧状态无效，重置');
+      store.reset();
+      show('view-lobby');
+    } else {
+      console.log('游戏状态已恢复');
+      renderCurrentPhase();
+    }
   } else {
     show('view-lobby');
   }
