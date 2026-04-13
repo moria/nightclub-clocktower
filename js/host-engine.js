@@ -107,6 +107,12 @@ export class HostEngine {
       p.infected = ROLES[roles[i]]?.isInfected || false;
     });
 
+    // 同步角色到 store（避免 WS 回程竞态：renderRoleReveal 需要 roleId）
+    for (const p of this.players) {
+      const sp = store.getPlayer(p.id);
+      if (sp) sp.roleId = p.roleId;
+    }
+
     // 通知每个玩家角色
     for (const p of this.players) {
       const role = ROLES[p.roleId];

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // 浏览器真机测试：用 Playwright 打开真实页面，模拟快速开始流程
-// 测试 1真人创建房间 → 选人数 → 快速开始 → 自动补AI → 走完整局
+// 重点验证：UI 不黑屏，每个阶段都有可见内容
 
 const { chromium } = require('playwright');
 
@@ -20,6 +20,13 @@ async function tryClick(page, selector, timeout = 1000) {
     if (await el.isVisible({ timeout })) { await el.click(); return true; }
   } catch (e) {}
   return false;
+}
+
+async function getActiveView(page) {
+  return page.evaluate(() => {
+    const active = document.querySelector('.view.active');
+    return active ? { id: active.id, text: active.textContent.trim().substring(0, 100) } : null;
+  });
 }
 
 async function runBrowserTest(targetTotal) {
@@ -48,25 +55,24 @@ async function runBrowserTest(targetTotal) {
     // 1. 打开页面
     log('  [1] 打开页面...');
     await page.goto(TARGET_URL, { waitUntil: 'networkidle', timeout: 30000 });
+    // 清除 localStorage 防止恢复旧状态
+    await page.evaluate(() => localStorage.clear());
+    await page.reload({ waitUntil: 'networkidle' });
     check(true, '页面加载完成');
 
-    // 2. 输入昵称 + 创建房间
+    // 2. 创建房间
     log('  [2] 创建房间...');
     await page.locator('#input-name').fill('🧪测试员');
     await page.click('#btn-create');
-
-    // 等房间大厅出现
     await page.waitForSelector('#view-room.active, #room-code-display', { timeout: 15000 });
     await sleep(1500);
     const roomCode = await page.locator('#room-code-display').textContent().catch(() => '');
     check(!!roomCode, `房间创建成功, 码: ${roomCode}`);
 
-    // 3. 等待人数选择器
+    // 3. 选人数
     log('  [3] 选人数...');
     await page.waitForSelector('#player-count-options', { timeout: 10000 });
     await sleep(500);
-
-    // 点对应人数按钮
     const clicked = await page.evaluate((n) => {
       const btns = document.querySelectorAll('#player-count-options button');
       for (const btn of btns) {
@@ -79,40 +85,72 @@ async function runBrowserTest(targetTotal) {
 
     // 4. 快速开始
     log('  [4] 快速开始...');
-    const quickBtnText = await page.locator('#btn-quick-start').textContent();
-    log(`    按钮文字: ${quickBtnText.trim()}`);
-    check(quickBtnText.includes('快速开始'), '快速开始按钮可见');
     await page.click('#btn-quick-start');
 
-    // 5. 等角色分配
-    log('  [5] 等待引擎启动...');
-    for (let i = 0; i < 60; i++) {
-      if (consoleLogs.some(l => l.includes('分配角色'))) break;
+    // 5. === 关键验证：角色揭示 ===
+    log('  [5] 验证角色揭示...');
+    await sleep(2000); // 等 WS 回程 + 渲染
+    let view = await getActiveView(page);
+    log(`    当前视图: ${view?.id} — "${view?.text?.substring(0, 60)}"`);
+
+    // 检查 view-reveal 有内容（不是空白）
+    const revealContent = await page.evaluate(() => {
+      const el = document.querySelector('#reveal-content');
+      return el ? el.textContent.trim() : '';
+    });
+    check(revealContent.length > 10, `角色揭示有内容 (${revealContent.length}字): "${revealContent.substring(0, 50)}..."`);
+
+    // 检查不是黑屏：有可见文字元素
+    const hasVisibleText = await page.evaluate(() => {
+      const active = document.querySelector('.view.active');
+      if (!active) return false;
+      const text = active.textContent.trim();
+      return text.length > 5;
+    });
+    check(hasVisibleText, '当前视图有可见文字（不是黑屏）');
+
+    // 6. === 等待进入夜晚，验证约会 UI ===
+    log('  [6] 验证夜晚UI...');
+    for (let i = 0; i < 30; i++) {
+      if (consoleLogs.some(l => l.includes('第') && l.includes('夜'))) break;
       await sleep(500);
     }
-    check(consoleLogs.some(l => l.includes('分配角色')), '角色分配完成');
-    check(consoleLogs.some(l => l.includes('补') && l.includes('AI')), '自动补AI');
+    await sleep(2000); // 等渲染
 
-    // 6. 跑完游戏（自动交互）
-    log('  [6] 游戏进行中，自动交互...');
+    const nightContent = await page.evaluate(() => {
+      const el = document.querySelector('#night-content');
+      return el ? el.textContent.trim() : '';
+    });
+    log(`    夜晚内容: "${nightContent.substring(0, 80)}"`);
+    check(nightContent.length > 5, `夜晚视图有内容 (${nightContent.length}字)`);
+
+    // 7. 自动交互走完游戏
+    log('  [7] 游戏进行中...');
     const maxSeconds = targetTotal >= 10 ? 300 : 180;
+    let phasesSeenWithContent = new Set();
+
     for (let i = 0; i < maxSeconds; i++) {
       if (consoleLogs.some(l => l.includes('游戏结束'))) break;
 
-      // 每2秒尝试一轮交互
       if (i % 2 === 0) {
-        // 约会：点"今晚不约"
+        // 记录当前视图状态
+        const v = await getActiveView(page);
+        if (v && v.text.length > 5) phasesSeenWithContent.add(v.id);
+
+        // 约会：不约
         await tryClick(page, 'button:has-text("今晚不约")');
         // 夜间行动：选第一个目标
-        const targetClicked = await tryClick(page, '.player-select-btn, .night-target, #night-content .btn-ghost');
+        const targetClicked = await tryClick(page, '.target-btn');
         if (targetClicked) {
-          await sleep(200);
+          await sleep(300);
+          await tryClick(page, '#btn-confirm-action');
           await tryClick(page, 'button:has-text("确认")');
         }
-        // 投票：处决
+        // 夜间情报
+        await tryClick(page, 'button:has-text("知道了")');
+        // 投票
         await tryClick(page, 'button:has-text("处决")');
-        // 夜间情报：知道了
-        await tryClick(page, 'button:has-text("知道了"), button:has-text("继续")');
+        await tryClick(page, 'button:has-text("反对")');
       }
       await sleep(1000);
     }
@@ -120,20 +158,22 @@ async function runBrowserTest(targetTotal) {
     const gameOver = consoleLogs.some(l => l.includes('游戏结束'));
     check(gameOver, '游戏正常结束');
 
-    // 胜负
-    const winLog = consoleLogs.find(l => l.includes('游戏结束'));
-    if (winLog) log(`  🏆 ${winLog}`);
+    // 8. 验证游戏结束 UI
+    await sleep(1000);
+    const endContent = await page.evaluate(() => {
+      const el = document.querySelector('#end-content');
+      return el ? el.textContent.trim() : '';
+    });
+    check(endContent.length > 10, `结束画面有内容 (${endContent.length}字): "${endContent.substring(0, 50)}..."`);
 
-    // 页面错误（忽略无害的）
+    log(`    有内容的视图: ${[...phasesSeenWithContent].join(', ')}`);
+
+    // 页面错误
     const criticalErrors = pageErrors.filter(e =>
       !e.includes('ResizeObserver') && !e.includes('Non-Error') && !e.includes('Script error')
     );
     check(criticalErrors.length === 0,
       criticalErrors.length === 0 ? '无页面错误' : `页面错误: ${criticalErrors[0]}`);
-
-    // Engine 关键日志
-    log('\n  📊 引擎关键日志:');
-    consoleLogs.filter(l => l.includes('[Engine]')).forEach(l => log(`    ${l}`));
 
   } catch (e) {
     console.log(`  ❌ 测试异常: ${e.message}`);
@@ -146,7 +186,7 @@ async function runBrowserTest(targetTotal) {
 }
 
 async function main() {
-  log('\n🌐 夜店钟楼 — 浏览器真机测试');
+  log('\n🌐 夜店钟楼 — 浏览器真机测试（含UI验证）');
   log('━'.repeat(60));
 
   const args = process.argv.slice(2);

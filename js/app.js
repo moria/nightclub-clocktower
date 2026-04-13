@@ -274,9 +274,30 @@ function renderCurrentPhase() {
     case PHASE.ROLE_REVEAL: show('view-reveal'); renderRoleReveal(); break;
     case PHASE.DATING:
     case PHASE.NIGHT_ACTION:
-    case PHASE.NIGHT: show('view-night'); break;
+    case PHASE.NIGHT:
+      show('view-night');
+      // 如果 night-content 为空（还没收到具体提示），显示等待
+      if (!$('#night-content')?.innerHTML?.trim()) {
+        html('#night-content', `
+          <div class="waiting">
+            <div class="spinner"></div>
+            <div class="waiting-text">🌙 第 ${store.state.dayNumber || 1} 夜 · 准备中...</div>
+          </div>
+        `);
+      }
+      break;
     case PHASE.DAY: show('view-day'); renderDay(); break;
-    case PHASE.VOTE: show('view-vote'); break;
+    case PHASE.VOTE:
+      show('view-vote');
+      if (!$('#vote-content')?.innerHTML?.trim()) {
+        html('#vote-content', `
+          <div class="waiting">
+            <div class="spinner"></div>
+            <div class="waiting-text">等待投票...</div>
+          </div>
+        `);
+      }
+      break;
     case PHASE.END: show('view-end'); break;
   }
 }
@@ -338,7 +359,16 @@ window._selectTotal = (n) => {
 
 function renderRoleReveal() {
   const role = store.getMyRole();
-  if (!role) return;
+  if (!role) {
+    // 角色数据还没到，先显示等待（WS 回程竞态防御）
+    html('#reveal-content', `
+      <div class="waiting">
+        <div class="spinner"></div>
+        <div class="waiting-text">正在揭示角色...</div>
+      </div>
+    `);
+    return;
+  }
   const faction = FACTION_INFO[role.faction];
 
   html('#reveal-content', `
