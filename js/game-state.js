@@ -57,6 +57,13 @@ class GameStore {
       winner: null,        // 'good' | 'evil' | null
       winReason: '',
 
+      // 历史记录（情报本用）
+      intelHistory: [],    // [{day, messages: [{type, text}]}] — 夜间情报
+      voteHistory: [],     // [{day, target, targetName, forCount, threshold, executed, side}]
+      datingHistory: [],   // [{day, myChoice, myChoiceName, paired, partnerName, tagReceived}]
+      eventTimeline: [],   // [{day, announcements: [{type, text}]}]
+      evilTeammates: [],   // [{id, name, role, emoji}] — 恶方互认
+
       // 持久化标记
       fuShengShiCooldown: false,  // 缚绳师冷却
       gouZiBound: {},             // { playerId: boundToPlayerId }

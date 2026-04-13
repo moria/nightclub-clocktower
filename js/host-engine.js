@@ -404,6 +404,35 @@ export class HostEngine {
       addMsg(b, `🌹 约会收获：对方标签「${ra.tags[Math.floor(Math.random() * ra.tags.length)]}」`);
     }
 
+    // 发送约会结果给每个真人玩家
+    for (const p of alive) {
+      if (!p.isBot) {
+        const myChoice = this.datingChoices[p.id] || 'none';
+        const isPaired = paired.has(p.id);
+        let partnerName = null;
+        let tagReceived = null;
+        if (isPaired) {
+          const pair = pairings.find(([a, b]) => a === p.id || b === p.id);
+          if (pair) {
+            const partnerId = pair[0] === p.id ? pair[1] : pair[0];
+            const partner = this.getPlayer(partnerId);
+            partnerName = partner?.name || partnerId;
+            const partnerRole = ROLES[partner?.roleId];
+            if (partnerRole) tagReceived = partnerRole.tags[Math.floor(Math.random() * partnerRole.tags.length)];
+          }
+        }
+        this.sendToPlayer(p.id, 'dating_result', {
+          playerId: p.id,
+          day: this.dayNumber,
+          myChoice,
+          myChoiceName: myChoice !== 'none' ? (this.getPlayer(myChoice)?.name || myChoice) : null,
+          paired: isPaired,
+          partnerName,
+          tagReceived,
+        });
+      }
+    }
+
     // 小三查询
     if (xioaSanQuery) {
       const pr = pairings.find(([a, b]) => a === xioaSanQuery.targetId || b === xioaSanQuery.targetId);

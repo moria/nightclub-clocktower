@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>夜店钟楼 - 不正经的血染钟楼</title>
-  <link rel="stylesheet" href="css/style.css?v=20260414">
+  <link rel="stylesheet" href="css/style.css?v=20260415">
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
@@ -14,6 +14,11 @@
 </head>
 <body>
   <div id="app">
+
+    <!-- ===== 轮次指示器 ===== -->
+    <div id="game-status-bar" style="display:none">
+      <span id="status-round"></span> · <span id="status-phase"></span>
+    </div>
 
     <!-- ===== 大厅视图 ===== -->
     <div id="view-lobby" class="view active">
@@ -98,6 +103,32 @@
 
   </div>
 
-  <script type="module" src="js/app.js?v=20260414"></script>
+  <!-- ===== 浮动按钮 ===== -->
+  <button id="btn-journal" class="fab fab-journal" style="display:none" onclick="window._openJournal()">📋</button>
+  <button id="btn-role-card" class="fab fab-role" style="display:none" onclick="window._openRoleCard()">🎭</button>
+
+  <!-- ===== 情报本弹窗 ===== -->
+  <div id="journal-panel" class="panel-overlay" style="display:none">
+    <div class="panel-container">
+      <div class="panel-header">
+        <h3>情报本</h3>
+        <button class="panel-close" onclick="window._closeJournal()">✕</button>
+      </div>
+      <div id="journal-content"></div>
+    </div>
+  </div>
+
+  <!-- ===== 角色卡弹窗 ===== -->
+  <div id="role-card-panel" class="panel-overlay" style="display:none">
+    <div class="panel-container">
+      <div class="panel-header">
+        <h3>我的角色</h3>
+        <button class="panel-close" onclick="window._closeRoleCard()">✕</button>
+      </div>
+      <div id="role-card-content"></div>
+    </div>
+  </div>
+
+  <script type="module" src="js/app.js?v=20260415"></script>
 </body>
 </html>

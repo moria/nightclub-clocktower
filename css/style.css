@@ -680,3 +680,209 @@ h3 { font-size: 1.2rem; }
 @media (min-width: 481px) {
   #app { padding: 24px; }
 }
+
+/* ============ 轮次指示器 ============ */
+#game-status-bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 8px 12px;
+  background: rgba(0, 240, 255, 0.06);
+  border: 1px solid rgba(0, 240, 255, 0.15);
+  border-radius: var(--radius-sm);
+  font-size: 0.85rem;
+  color: var(--neon-cyan);
+  margin-bottom: 8px;
+  flex-shrink: 0;
+}
+
+#status-round {
+  font-family: var(--font-title);
+}
+
+/* ============ 浮动按钮 (FAB) ============ */
+.fab {
+  position: fixed;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-card);
+  font-size: 1.4rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 50;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.5);
+  transition: all 0.2s;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.fab:active {
+  transform: scale(0.92);
+}
+
+.fab-journal {
+  bottom: 24px;
+  right: 24px;
+}
+
+.fab-journal:hover {
+  border-color: var(--neon-cyan);
+  box-shadow: var(--glow-cyan);
+}
+
+.fab-role {
+  bottom: 24px;
+  right: 82px;
+}
+
+.fab-role:hover {
+  border-color: var(--neon-purple);
+  box-shadow: var(--glow-purple);
+}
+
+/* ============ 弹窗面板 (情报本 / 角色卡) ============ */
+.panel-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.88);
+  z-index: 200;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  animation: fadeIn 0.2s ease;
+}
+
+.panel-container {
+  width: 100%;
+  max-width: 480px;
+  max-height: 85vh;
+  background: var(--bg-dark);
+  border-top: 2px solid var(--neon-cyan);
+  border-radius: 16px 16px 0 0;
+  display: flex;
+  flex-direction: column;
+  animation: slideUp 0.3s ease;
+  overflow: hidden;
+}
+
+@keyframes slideUp {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+
+.panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border-subtle);
+  flex-shrink: 0;
+}
+
+.panel-header h3 {
+  color: var(--neon-cyan);
+}
+
+.panel-close {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 1px solid var(--border-subtle);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 1rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.panel-close:hover {
+  border-color: var(--neon-pink);
+  color: var(--neon-pink);
+}
+
+/* ============ 情报本内容 ============ */
+#journal-content {
+  overflow-y: auto;
+  flex: 1;
+  padding: 0 0 16px;
+}
+
+.journal-tabs {
+  display: flex;
+  border-bottom: 1px solid var(--border-subtle);
+  padding: 0 12px;
+  flex-shrink: 0;
+}
+
+.journal-tab {
+  flex: 1;
+  padding: 10px 4px;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--text-secondary);
+  font-family: var(--font-title);
+  font-size: 0.95rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.journal-tab.active {
+  color: var(--neon-cyan);
+  border-bottom-color: var(--neon-cyan);
+}
+
+.journal-tab:hover {
+  color: var(--text-primary);
+}
+
+.journal-body {
+  padding: 12px 16px;
+}
+
+.journal-group {
+  margin-bottom: 16px;
+}
+
+.journal-day-label {
+  font-family: var(--font-title);
+  font-size: 0.85rem;
+  color: var(--neon-purple);
+  margin-bottom: 6px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid rgba(180, 77, 255, 0.2);
+}
+
+.journal-item {
+  padding: 8px 12px;
+  margin-bottom: 4px;
+  background: var(--bg-card);
+  border-radius: var(--radius-sm);
+  font-size: 0.9rem;
+  line-height: 1.5;
+  border: 1px solid var(--border-subtle);
+}
+
+.journal-item.danger {
+  border-color: rgba(255, 23, 68, 0.3);
+  background: rgba(255, 23, 68, 0.06);
+}
+
+.journal-item.warning {
+  border-color: rgba(255, 204, 0, 0.3);
+  background: rgba(255, 204, 0, 0.06);
+}
+
+/* ============ 角色卡弹窗内容 ============ */
+#role-card-content {
+  overflow-y: auto;
+  flex: 1;
+  padding: 16px;
+}

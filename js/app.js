@@ -189,7 +189,12 @@ function handleRoomEvent(event, data) {
     case 'phase_change':
       store.update({ phase: data.phase });
       if (data.dayNumber !== undefined) store.updateNested('dayNumber', data.dayNumber);
-      if (data.announcements) store.updateNested('dayState.announcements', data.announcements);
+      if (data.announcements) {
+        store.updateNested('dayState.announcements', data.announcements);
+        // 存储到事件时间线
+        store.state.eventTimeline.push({ day: data.dayNumber || store.state.dayNumber, announcements: data.announcements });
+        store._persist();
+      }
       if (data.alivePlayers) {
         for (const ap of data.alivePlayers) {
           const p = store.getPlayer(ap.id);
@@ -216,11 +221,33 @@ function handleRoomEvent(event, data) {
       break;
     case 'night_results':
       if (shouldIgnore(data)) return;
+      // 存储夜间情报
+      if (data.messages && data.messages.length > 0) {
+        store.state.intelHistory.push({ day: store.state.dayNumber, messages: data.messages });
+        store._persist();
+      }
       renderNightResults(data.messages);
       break;
     case 'evil_reveal':
       if (shouldIgnore(data)) return;
+      // 存储恶方队友
+      if (data.teammates) {
+        store.update({ evilTeammates: data.teammates.map(t => ({ id: t.id, name: t.name, role: t.role, emoji: t.emoji })) });
+      }
       renderEvilReveal(data);
+      break;
+    case 'dating_result':
+      if (shouldIgnore(data)) return;
+      // 存储约会历史
+      store.state.datingHistory.push({
+        day: data.day,
+        myChoice: data.myChoice,
+        myChoiceName: data.myChoiceName,
+        paired: data.paired,
+        partnerName: data.partnerName,
+        tagReceived: data.tagReceived,
+      });
+      store._persist();
       break;
     case 'vote_start':
       renderVotePanel(data);
@@ -229,9 +256,31 @@ function handleRoomEvent(event, data) {
       updateVoteDisplay(data);
       break;
     case 'execution':
+      // 存储投票历史
+      store.state.voteHistory.push({
+        day: store.state.dayNumber,
+        target: data.target.id,
+        targetName: data.target.name,
+        forCount: data.forCount,
+        threshold: data.threshold,
+        executed: true,
+        side: data.side,
+      });
+      store._persist();
       renderExecution(data);
       break;
     case 'acquittal':
+      // 存储投票历史
+      store.state.voteHistory.push({
+        day: store.state.dayNumber,
+        target: data.target.id,
+        targetName: data.target.name,
+        forCount: data.forCount,
+        threshold: data.threshold,
+        executed: false,
+        side: null,
+      });
+      store._persist();
       renderAcquittal(data);
       break;
     case 'game_over':
@@ -288,6 +337,8 @@ function requestStart(targetTotal) {
 // ============ 视图渲染 ============
 
 function renderCurrentPhase() {
+  updateStatusBar();
+  updateFloatingButtons();
   switch (store.state.phase) {
     case PHASE.LOBBY: show('view-lobby'); break;
     case PHASE.ROLE_REVEAL: show('view-reveal'); renderRoleReveal(); break;
@@ -823,3 +874,201 @@ function renderZuoJingTantrum(data) {
   `;
   document.body.appendChild(overlay);
 }
+
+// ============ 轮次指示器 ============
+
+function updateStatusBar() {
+  const bar = $('#game-status-bar');
+  if (!bar) return;
+  const { phase, dayNumber } = store.state;
+  if (phase === PHASE.LOBBY || phase === PHASE.END) {
+    bar.style.display = 'none';
+    return;
+  }
+  bar.style.display = 'flex';
+  const roundEl = $('#status-round');
+  const phaseEl = $('#status-phase');
+  if (roundEl) roundEl.textContent = `第 ${dayNumber || 1} 轮`;
+  const phaseMap = {
+    [PHASE.ROLE_REVEAL]: '角色揭示',
+    [PHASE.NIGHT]: '夜晚',
+    [PHASE.DATING]: '约会阶段',
+    [PHASE.NIGHT_ACTION]: '夜间行动',
+    [PHASE.DAY]: '白天讨论',
+    [PHASE.VOTE]: '投票处决',
+  };
+  if (phaseEl) phaseEl.textContent = phaseMap[phase] || phase;
+}
+
+// ============ 浮动按钮显示控制 ============
+
+function updateFloatingButtons() {
+  const journalBtn = $('#btn-journal');
+  const roleBtn = $('#btn-role-card');
+  if (!journalBtn || !roleBtn) return;
+  const phase = store.state.phase;
+  const inGame = phase !== PHASE.LOBBY && phase !== PHASE.END && store.state.players.length > 0;
+  journalBtn.style.display = inGame ? 'flex' : 'none';
+  roleBtn.style.display = inGame ? 'flex' : 'none';
+}
+
+// ============ 情报本 ============
+
+let journalCurrentTab = 'intel';
+
+function openJournal() {
+  const panel = $('#journal-panel');
+  if (panel) {
+    panel.style.display = 'flex';
+    renderJournal();
+  }
+}
+
+function closeJournal() {
+  const panel = $('#journal-panel');
+  if (panel) panel.style.display = 'none';
+}
+
+function renderJournal() {
+  const tabs = ['intel', 'vote', 'dating', 'event'];
+  const tabNames = { intel: '情报', vote: '投票', dating: '约会', event: '事件' };
+
+  const tabsHtml = tabs.map(t =>
+    `<button class="journal-tab ${t === journalCurrentTab ? 'active' : ''}" onclick="window._switchJournalTab('${t}')">${tabNames[t]}</button>`
+  ).join('');
+
+  let contentHtml = '';
+  switch (journalCurrentTab) {
+    case 'intel':
+      contentHtml = renderJournalIntel();
+      break;
+    case 'vote':
+      contentHtml = renderJournalVote();
+      break;
+    case 'dating':
+      contentHtml = renderJournalDating();
+      break;
+    case 'event':
+      contentHtml = renderJournalEvent();
+      break;
+  }
+
+  html('#journal-content', `
+    <div class="journal-tabs">${tabsHtml}</div>
+    <div class="journal-body">${contentHtml}</div>
+  `);
+}
+
+function renderJournalIntel() {
+  const history = store.state.intelHistory;
+  if (history.length === 0) return '<p class="text-dim text-center mt-16">暂无情报</p>';
+  return history.map(entry => `
+    <div class="journal-group">
+      <div class="journal-day-label">第 ${entry.day} 夜</div>
+      ${entry.messages.map(m => `<div class="journal-item ${m.type === 'danger' ? 'danger' : ''}">${m.text}</div>`).join('')}
+    </div>
+  `).join('');
+}
+
+function renderJournalVote() {
+  const history = store.state.voteHistory;
+  if (history.length === 0) return '<p class="text-dim text-center mt-16">暂无投票记录</p>';
+  return history.map(entry => `
+    <div class="journal-group">
+      <div class="journal-day-label">第 ${entry.day} 天</div>
+      <div class="journal-item">
+        <strong>${entry.targetName}</strong>
+        ${entry.executed
+          ? `<span class="badge badge-evil">处决</span> (${entry.side === 'evil' ? '恶方' : '好人'})`
+          : `<span class="badge badge-good">释放</span>`}
+        <span class="text-dim"> · ${entry.forCount}/${entry.threshold} 票</span>
+      </div>
+    </div>
+  `).join('');
+}
+
+function renderJournalDating() {
+  const history = store.state.datingHistory;
+  if (history.length === 0) return '<p class="text-dim text-center mt-16">暂无约会记录</p>';
+  return history.map(entry => `
+    <div class="journal-group">
+      <div class="journal-day-label">第 ${entry.day} 夜</div>
+      <div class="journal-item">
+        ${entry.myChoice === 'none'
+          ? '今晚没约'
+          : `邀请了 <strong>${entry.myChoiceName || entry.myChoice}</strong>`}
+        ${entry.paired
+          ? ` · 配对成功 (${entry.partnerName})${entry.tagReceived ? ` · 标签「${entry.tagReceived}」` : ''}`
+          : entry.myChoice !== 'none' ? ' · 未配对' : ''}
+      </div>
+    </div>
+  `).join('');
+}
+
+function renderJournalEvent() {
+  const history = store.state.eventTimeline;
+  if (history.length === 0) return '<p class="text-dim text-center mt-16">暂无事件</p>';
+  return history.map(entry => `
+    <div class="journal-group">
+      <div class="journal-day-label">第 ${entry.day} 天</div>
+      ${entry.announcements.map(a => `<div class="journal-item ${a.type === 'death' ? 'danger' : a.type === 'warning' ? 'warning' : ''}">${a.text}</div>`).join('')}
+    </div>
+  `).join('');
+}
+
+window._switchJournalTab = (tab) => {
+  journalCurrentTab = tab;
+  renderJournal();
+};
+
+window._openJournal = () => openJournal();
+window._closeJournal = () => closeJournal();
+
+// ============ 角色卡弹窗 ============
+
+function openRoleCard() {
+  const panel = $('#role-card-panel');
+  if (!panel) return;
+  const role = store.getMyRole();
+  if (!role) return;
+  const faction = FACTION_INFO[role.faction];
+  const evilTeammates = store.state.evilTeammates;
+
+  let teammatesHtml = '';
+  if (evilTeammates.length > 0) {
+    teammatesHtml = `
+      <div class="mt-16" style="border-top:1px solid var(--border-subtle);padding-top:12px">
+        <p class="text-dim" style="font-size:0.85rem;margin-bottom:8px">恶方队友</p>
+        ${evilTeammates.map(t => `
+          <div class="journal-item" style="display:flex;align-items:center;gap:8px">
+            <span style="font-size:1.2rem">${t.emoji}</span> ${t.name} — ${t.role}
+          </div>
+        `).join('')}
+      </div>
+    `;
+  }
+
+  html('#role-card-content', `
+    <div class="role-card faction-${role.faction}">
+      <div class="role-emoji">${role.emoji}</div>
+      <div class="role-name">${role.name}</div>
+      <div class="role-faction" style="color:${faction.color}">
+        ${faction.emoji} ${faction.name} · ${faction.side === 'good' ? '好人阵营' : '恶方阵营'}
+      </div>
+      <div class="role-tags">
+        ${role.tags.map(t => `<span class="tag">${t}</span>`).join('')}
+      </div>
+      <div class="role-skill">${role.skill}</div>
+      ${teammatesHtml}
+    </div>
+  `);
+  panel.style.display = 'flex';
+}
+
+function closeRoleCard() {
+  const panel = $('#role-card-panel');
+  if (panel) panel.style.display = 'none';
+}
+
+window._openRoleCard = () => openRoleCard();
+window._closeRoleCard = () => closeRoleCard();
