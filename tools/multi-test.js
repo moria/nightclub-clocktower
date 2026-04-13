@@ -254,12 +254,22 @@ async function main() {
   fillMode = args.includes('--fill');
   const argSizes = args.filter(a => !isNaN(a)).map(Number);
   const sizes = argSizes.length > 0 ? argSizes : (fillMode ? [5, 7, 10] : [5, 6, 7, 8, 9, 10, 12, 15]);
-  const tests = sizes.map(n => ({
-    total: n,
-    // fill模式: 0个预装bot, 1-2个真人, 其余由 request_start 自动补
-    bots: fillMode ? 0 : Math.max(n - Math.ceil(n / 5), n - 3),
-    humans: fillMode ? Math.min(2, n) : undefined,
-  }));
+  let tests;
+  if (fillMode) {
+    // fill模式: 每个人数测 1真人 和 2真人 两种场景
+    tests = [];
+    for (const n of sizes) {
+      tests.push({ total: n, bots: 0, humans: 1 });
+      if (n >= 6) tests.push({ total: n, bots: 0, humans: 2 });
+      if (n >= 8) tests.push({ total: n, bots: 0, humans: 3 });
+    }
+  } else {
+    tests = sizes.map(n => ({
+      total: n,
+      bots: Math.max(n - Math.ceil(n / 5), n - 3),
+      humans: undefined,
+    }));
+  }
 
   let totalPassed = 0, totalFailed = 0;
 
