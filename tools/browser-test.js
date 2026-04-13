@@ -4,7 +4,13 @@
 
 const { chromium } = require('playwright');
 
-const TARGET_URL = 'https://moria.github.io/nightclub-clocktower/';
+const TARGET_URL = (() => {
+  const urlArg = process.argv.find(a => a.startsWith('--url='));
+  if (urlArg) return urlArg.split('=')[1];
+  const idx = process.argv.indexOf('--url');
+  if (idx >= 0 && process.argv[idx + 1]) return process.argv[idx + 1];
+  return 'https://moria.github.io/nightclub-clocktower/';
+})();
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 const log = (msg) => console.log(`[Browser] ${msg}`);
 
