@@ -103,20 +103,22 @@ function bindEvents() {
     }
   });
 
-  // 开始游戏（房主） — 通知服务端启动
+  // 开始游戏（房主） — 已满人时直接开始
   $('#btn-start')?.addEventListener('click', () => {
     if (!store.isHost()) return;
     const players = store.state.players;
     if (players.length < 5) return alert('至少需要5名玩家');
     if (players.length > 15) return alert('最多支持15名玩家');
+    requestStart(players.length);
+  });
 
-    supabase.broadcastToRoom(store.state.roomCode, 'request_start', {
-      hostId: store.state.hostId,
-      playerCount: players.length,
-    });
-    // UI 等待服务端 phase_change 响应
-    html('#btn-start', '⏳ 等待服务器...');
-    $('#btn-start').disabled = true;
+  // 快速开始 — 不足的补 AI
+  $('#btn-quick-start')?.addEventListener('click', () => {
+    if (!store.isHost()) return;
+    const currentCount = store.state.players.length;
+    const targetCount = store.state._selectedTotal || Math.max(5, currentCount);
+    if (targetCount < 5 || targetCount > 15) return alert('游戏人数需要5-15人');
+    requestStart(targetCount);
   });
 
   // 新游戏
@@ -233,6 +235,18 @@ function subscribeRoom(code) {
 
 // ============ 游戏启动由服务端驱动，客户端无需本地引擎 ============
 
+function requestStart(targetTotal) {
+  supabase.broadcastToRoom(store.state.roomCode, 'request_start', {
+    hostId: store.state.hostId,
+    targetTotal,
+    currentPlayers: store.state.players.map(p => ({ id: p.id, name: p.name })),
+  });
+  const startBtn = $('#btn-start');
+  const quickBtn = $('#btn-quick-start');
+  if (startBtn) { startBtn.textContent = '⏳ 等待服务器...'; startBtn.disabled = true; }
+  if (quickBtn) { quickBtn.textContent = '⏳ 正在补位...'; quickBtn.disabled = true; }
+}
+
 // ============ 视图渲染 ============
 
 function renderCurrentPhase() {
@@ -263,13 +277,45 @@ function renderPlayerList() {
     </li>
   `).join(''));
 
+  const controls = $('#start-controls');
+  if (controls) controls.style.display = store.isHost() ? 'block' : 'none';
+
   const startBtn = $('#btn-start');
   if (startBtn) {
-    startBtn.style.display = store.isHost() ? 'flex' : 'none';
     startBtn.disabled = players.length < 5;
     startBtn.textContent = `🎲 开始游戏 (${players.length}人)`;
   }
+
+  // 人数选择器
+  const optionsEl = $('#player-count-options');
+  if (optionsEl && store.isHost()) {
+    const current = players.length;
+    const selected = store.state._selectedTotal || Math.max(5, current);
+    optionsEl.innerHTML = [5,6,7,8,9,10,12,15].map(n => `
+      <button class="btn ${n === selected ? 'btn-primary' : 'btn-ghost'}"
+              style="min-width:44px;padding:6px 10px;font-size:0.9rem"
+              onclick="window._selectTotal(${n})" ${n < current ? 'disabled' : ''}>
+        ${n}人
+      </button>
+    `).join('');
+
+    const botsNeeded = Math.max(0, selected - current);
+    const quickBtn = $('#btn-quick-start');
+    if (quickBtn) {
+      if (botsNeeded > 0) {
+        quickBtn.textContent = `⚡ 快速开始（补 ${botsNeeded} 个AI）`;
+        quickBtn.style.display = 'flex';
+      } else {
+        quickBtn.style.display = 'none';
+      }
+    }
+  }
 }
+
+window._selectTotal = (n) => {
+  store.state._selectedTotal = n;
+  renderPlayerList();
+};
 
 function renderRoleReveal() {
   const role = store.getMyRole();

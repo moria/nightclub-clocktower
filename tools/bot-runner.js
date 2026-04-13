@@ -228,7 +228,7 @@ function connectWS() {
 }
 
 // ============ 处理客户端事件 ============
-function handleClientEvent(event, payload) {
+async function handleClientEvent(event, payload) {
   switch (event) {
     case 'player_joined': {
       if (game.players.find(p => p.id === payload.id)) return;
@@ -243,13 +243,19 @@ function handleClientEvent(event, payload) {
     }
 
     case 'request_start': {
-      // 真人房主从浏览器触发开始
+      // 真人房主从浏览器触发开始，自动补 bot
       if (game.phase !== 'lobby') return;
-      if (game.players.length < TOTAL_PLAYERS) {
-        log(`⚠️ 收到开始请求但人数不足 (${game.players.length}/${TOTAL_PLAYERS})`);
+      const targetTotal = payload.targetTotal || TOTAL_PLAYERS;
+      if (targetTotal < 5 || targetTotal > 15) {
+        log(`⚠️ 不支持 ${targetTotal} 人游戏`);
         return;
       }
-      log('🎮 收到房主开始请求，启动游戏...');
+      const botsNeeded = targetTotal - game.players.length;
+      if (botsNeeded > 0) {
+        log(`🤖 自动补 ${botsNeeded} 个机器人...`);
+        await fillBots(botsNeeded);
+      }
+      log(`🎮 收到房主开始请求 (${game.players.length}人)，启动游戏...`);
       startGame();
       break;
     }
@@ -286,6 +292,28 @@ function handleClientEvent(event, payload) {
         game.earlyEvents.set(key, payload.inFavor);
       }
       break;
+    }
+  }
+}
+
+// ============ 动态补 Bot ============
+async function fillBots(count) {
+  const existingBotCount = game.players.filter(p => p.isBot).length;
+  for (let i = 0; i < count; i++) {
+    const idx = existingBotCount + i;
+    const name = ALL_BOT_NAMES[idx] || `🤖机器人${idx + 1}`;
+    const botId = `bot-${idx}-${Date.now().toString(36)}`;
+    const seatIndex = game.players.length + 1;
+    try {
+      await supaFetch('players', {
+        method: 'POST',
+        body: JSON.stringify({ room_id: game.roomId, player_id: botId, name, seat_index: seatIndex, alive: true, infected: false, ghost_vote_used: false, connected: true }),
+      });
+      game.players.push({ id: botId, name, roleId: null, alive: true, infected: false, isBot: true, seatIndex });
+      broadcast('player_joined', { id: botId, name, seatIndex });
+      log(`   🤖 ${name} 加入`);
+    } catch (e) {
+      log(`   ⚠️ 补 bot 失败: ${e.message}`);
     }
   }
 }

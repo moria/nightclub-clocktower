@@ -123,8 +123,10 @@ class SimClient {
 }
 
 // ============ 单次测试 ============
-async function runTest(totalPlayers, numBots) {
-  const numHumans = totalPlayers - numBots;
+let fillMode = false; // set from main()
+
+async function runTest(totalPlayers, numBots, overrideHumans) {
+  const numHumans = overrideHumans !== undefined ? overrideHumans : (totalPlayers - numBots);
   log(`\n${'═'.repeat(60)}`);
   log(`  🧪 ${totalPlayers}人局测试 (${numBots} bot + ${numHumans} 模拟真人)`);
   log(`${'═'.repeat(60)}`);
@@ -175,6 +177,13 @@ async function runTest(totalPlayers, numBots) {
       await sleep(800); // 错开加入避免竞态
     }
     check(clients.length === numHumans, `${numHumans} 客户端全部加入`);
+
+    // 3.5 如果是补位模式，第一个客户端发 request_start
+    if (fillMode && clients.length > 0) {
+      log(`  [2.5] 发送 request_start (targetTotal: ${totalPlayers})...`);
+      await sleep(1000);
+      clients[0]._broadcast('request_start', { targetTotal: totalPlayers });
+    }
 
     // 4. 等待游戏开始和结束
     log(`  [3] 等待游戏完成...`);
@@ -241,20 +250,24 @@ async function main() {
   log('\n🧪 夜店钟楼 — 多人数端到端测试');
   log('━'.repeat(60));
 
-  // 从 CLI 参数读取要测试的人数，默认全覆盖
+  // CLI: --fill 测试自动补位模式(bot=0), 否则默认模式
+  fillMode = args.includes('--fill');
   const argSizes = args.filter(a => !isNaN(a)).map(Number);
-  const tests = (argSizes.length > 0 ? argSizes : [5, 6, 7, 8, 9, 10, 12, 15]).map(n => ({
+  const sizes = argSizes.length > 0 ? argSizes : (fillMode ? [5, 7, 10] : [5, 6, 7, 8, 9, 10, 12, 15]);
+  const tests = sizes.map(n => ({
     total: n,
-    bots: Math.max(n - Math.ceil(n / 5), n - 3), // 留 1-3 个真人位
+    // fill模式: 0个预装bot, 1-2个真人, 其余由 request_start 自动补
+    bots: fillMode ? 0 : Math.max(n - Math.ceil(n / 5), n - 3),
+    humans: fillMode ? Math.min(2, n) : undefined,
   }));
 
   let totalPassed = 0, totalFailed = 0;
 
   for (const t of tests) {
-    const result = await runTest(t.total, t.bots);
+    const result = await runTest(t.total, t.bots, t.humans);
     totalPassed += result.passed;
     totalFailed += result.failed;
-    await sleep(2000); // 等残留清理
+    await sleep(2000);
   }
 
   log(`\n${'━'.repeat(60)}`);
