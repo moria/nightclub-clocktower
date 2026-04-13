@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>夜店钟楼 - 不正经的血染钟楼</title>
+  <link rel="stylesheet" href="css/style.css">
+  <meta name="theme-color" content="#0a0a0f">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+</head>
+<body>
+  <div id="app">
+
+    <!-- ===== 大厅视图 ===== -->
+    <div id="view-lobby" class="view active">
+      <div class="header">
+        <h1>夜店钟楼</h1>
+        <p class="subtitle">不正经的血染钟楼 · 5-15人</p>
+      </div>
+
+      <div class="card">
+        <input type="text" id="input-name" class="input" placeholder="你的昵称" maxlength="12" autocomplete="off">
+      </div>
+
+      <button id="btn-create" class="btn btn-primary btn-block">
+        🎪 创建房间
+      </button>
+
+      <div class="divider"></div>
+
+      <div class="card">
+        <input type="text" id="input-code" class="input" placeholder="输入房间码" maxlength="6"
+               style="text-transform:uppercase;letter-spacing:4px;text-align:center;font-size:1.3rem"
+               autocomplete="off">
+      </div>
+
+      <button id="btn-join" class="btn btn-secondary btn-block">
+        🚪 加入房间
+      </button>
+
+      <div class="mt-24 text-center text-dim" style="font-size:0.8rem">
+        <p>约会有风险，社交需谨慎 🦠</p>
+      </div>
+    </div>
+
+    <!-- ===== 房间等待视图 ===== -->
+    <div id="view-room" class="view">
+      <div class="header">
+        <h2>房间</h2>
+        <div class="room-code" id="room-code-display"></div>
+        <p class="text-dim">分享房间码给好友</p>
+      </div>
+
+      <ul class="player-list" id="player-list"></ul>
+
+      <button id="btn-start" class="btn btn-primary btn-block mt-16" disabled>
+        🎲 开始游戏
+      </button>
+    </div>
+
+    <!-- ===== 角色揭示视图 ===== -->
+    <div id="view-reveal" class="view">
+      <div id="reveal-content"></div>
+    </div>
+
+    <!-- ===== 夜晚视图 ===== -->
+    <div id="view-night" class="view night-overlay">
+      <div id="night-content"></div>
+    </div>
+
+    <!-- ===== 白天视图 ===== -->
+    <div id="view-day" class="view">
+      <div id="day-content"></div>
+    </div>
+
+    <!-- ===== 投票视图 ===== -->
+    <div id="view-vote" class="view">
+      <div id="vote-content"></div>
+    </div>
+
+    <!-- ===== 游戏结束视图 ===== -->
+    <div id="view-end" class="view">
+      <div id="end-content"></div>
+    </div>
+
+  </div>
+
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
