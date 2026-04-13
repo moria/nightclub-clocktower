@@ -89,7 +89,12 @@ async function runBrowserTest(targetTotal) {
 
     // 5. === 关键验证：角色揭示 ===
     log('  [5] 验证角色揭示...');
-    await sleep(2000); // 等 WS 回程 + 渲染
+    // 等待引擎完成角色分配（bot 越多 REST 调用越久）
+    for (let i = 0; i < 30; i++) {
+      if (consoleLogs.some(l => l.includes('分配角色'))) break;
+      await sleep(500);
+    }
+    await sleep(2000); // 额外等渲染
     let view = await getActiveView(page);
     log(`    当前视图: ${view?.id} — "${view?.text?.substring(0, 60)}"`);
 
