@@ -7,22 +7,89 @@ const WebSocket = require('ws');
 const SUPABASE_URL = 'https://nxeybszulisostkazlkc.supabase.co';
 const ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im54ZXlic3p1bGlzb3N0a2F6bGtjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYwNDA3NTMsImV4cCI6MjA5MTYxNjc1M30.xGtEfSMKvglwXYZg4mOR_pyIMpjAFQSxUUR6h01P5Xo';
 
-const BOT_NAMES = ['🤖张飞', '🤖貂蝉', '🤖吕布', '🤖孙尚香'];
+// CLI 参数: --bots N (bot数量, 默认4) --total N (总人数, 默认5)
+const args = process.argv.slice(2);
+const getArg = (name, def) => { const i = args.indexOf('--' + name); return i >= 0 && args[i+1] ? parseInt(args[i+1]) : def; };
+const NUM_BOTS = getArg('bots', 4);
+const TOTAL_PLAYERS = getArg('total', NUM_BOTS + 1);
+const HUMANS_NEEDED = TOTAL_PLAYERS - NUM_BOTS;
 
-// ============ 角色数据（内联简化版） ============
+const ALL_BOT_NAMES = ['🤖张飞','🤖貂蝉','🤖吕布','🤖孙尚香','🤖曹操','🤖小乔','🤖赵云','🤖黄月英','🤖诸葛亮','🤖甄姬','🤖关羽','🤖大乔','🤖周瑜','🤖马超'];
+const BOT_NAMES = ALL_BOT_NAMES.slice(0, NUM_BOTS);
+
+// ============ 角色数据（完整20角色） ============
 const FACTION = { PURE: 'pure', SIMP: 'simp', TEAIST: 'teaist', SCUM: 'scum' };
 const TAGS = { ATTACK: '攻击性', PROTECT: '保护性', SPY: '窥探性', SOCIAL: '社交性', INFECT: '传染性', STEALTH: '隐蔽性' };
 
 const ROLES = {
+  // 清流派
   jian_biao_shi: { id: 'jian_biao_shi', name: '鉴婊师', emoji: '🔍', faction: FACTION.PURE, tags: [TAGS.SPY, TAGS.SOCIAL], nightOrder: 7, mechanic: 'select_one', isInfo: true },
   xiao_hu_shi: { id: 'xiao_hu_shi', name: '小护士', emoji: '💉', faction: FACTION.PURE, tags: [TAGS.PROTECT, TAGS.SPY], nightOrder: 8, mechanic: 'select_one', isInfo: true },
   ji_rou_meng: { id: 'ji_rou_meng', name: '肌肉猛1', emoji: '💪', faction: FACTION.PURE, tags: [TAGS.PROTECT, TAGS.ATTACK], nightOrder: 4, mechanic: 'select_one' },
+  mu_la_la: { id: 'mu_la_la', name: '母拉拉', emoji: '👩‍❤️‍👩', faction: FACTION.PURE, tags: [TAGS.SOCIAL, TAGS.SPY], nightOrder: 12, mechanic: 'select_two', isInfo: true },
+  hua_fang_gu_niang: { id: 'hua_fang_gu_niang', name: '花房姑娘', emoji: '🌸', faction: FACTION.PURE, tags: [TAGS.SPY, TAGS.SOCIAL], nightOrder: 13, mechanic: 'select_one', isInfo: true },
+  hou_zi: { id: 'hou_zi', name: '猴子', emoji: '🐒', faction: FACTION.PURE, tags: [TAGS.SPY, TAGS.SOCIAL], nightOrder: 14, mechanic: 'select_one', isInfo: true },
+  cai_zhuang_mu: { id: 'cai_zhuang_mu', name: '彩妆母1', emoji: '💄', faction: FACTION.PURE, tags: [TAGS.SOCIAL, TAGS.SPY], nightOrder: 1, mechanic: 'passive_first_night' },
+  cu_kou: { id: 'cu_kou', name: '粗口1s', emoji: '🤬', faction: FACTION.PURE, tags: [TAGS.ATTACK, TAGS.SOCIAL], nightOrder: -1, mechanic: 'daytime' },
+  gang_tie_zhi_nan: { id: 'gang_tie_zhi_nan', name: '钢铁直男', emoji: '🏋️', faction: FACTION.PURE, tags: [TAGS.PROTECT, TAGS.SOCIAL], nightOrder: 10, mechanic: 'passive' },
+  xiao_san: { id: 'xiao_san', name: '小三', emoji: '💔', faction: FACTION.PURE, tags: [TAGS.SOCIAL, TAGS.SPY], nightOrder: 11, mechanic: 'select_one', isInfo: true },
+  bao_zha_ling: { id: 'bao_zha_ling', name: '爆炸0', emoji: '🔥', faction: FACTION.PURE, tags: [TAGS.ATTACK, TAGS.SOCIAL], nightOrder: 16, mechanic: 'passive' },
+  // 恋爱脑
+  side: { id: 'side', name: 'Side', emoji: '🔄', faction: FACTION.SIMP, tags: [TAGS.SOCIAL, TAGS.STEALTH], nightOrder: -1, mechanic: 'passive' },
+  gai_zhuang_che: { id: 'gai_zhuang_che', name: '改装车', emoji: '🚗', faction: FACTION.SIMP, tags: [TAGS.ATTACK, TAGS.STEALTH], nightOrder: -1, mechanic: 'passive' },
+  gou_zi: { id: 'gou_zi', name: '狗子', emoji: '🐕', faction: FACTION.SIMP, tags: [TAGS.SOCIAL, TAGS.PROTECT], nightOrder: -1, mechanic: 'passive' },
+  ji_nv: { id: 'ji_nv', name: '妓女', emoji: '💃', faction: FACTION.SIMP, tags: [TAGS.SOCIAL, TAGS.INFECT], nightOrder: -1, mechanic: 'passive' },
+  // 茶艺师
   zao_yao_jing: { id: 'zao_yao_jing', name: '造谣精', emoji: '📰', faction: FACTION.TEAIST, tags: [TAGS.SOCIAL, TAGS.STEALTH], nightOrder: 3, mechanic: 'select_one' },
+  miao_nan: { id: 'miao_nan', name: '秒男', emoji: '⚡', faction: FACTION.TEAIST, tags: [TAGS.ATTACK, TAGS.INFECT], nightOrder: 6, mechanic: 'select_one' },
+  zuo_jing: { id: 'zuo_jing', name: '作精', emoji: '😭', faction: FACTION.TEAIST, tags: [TAGS.SOCIAL, TAGS.ATTACK], nightOrder: -1, mechanic: 'daytime' },
+  // 渣王
   hiv: { id: 'hiv', name: 'HIV携带者', emoji: '☠️', faction: FACTION.SCUM, tags: [TAGS.ATTACK, TAGS.INFECT], nightOrder: 5, mechanic: 'select_one', isInfected: true },
+  fu_sheng_shi: { id: 'fu_sheng_shi', name: '缚绳师', emoji: '⛓️', faction: FACTION.SCUM, tags: [TAGS.ATTACK, TAGS.STEALTH], nightOrder: 5, mechanic: 'select_one' },
 };
 
-const FIVE_PLAYER_ROLES = ['jian_biao_shi', 'xiao_hu_shi', 'ji_rou_meng', 'zao_yao_jing', 'hiv'];
-const INFO_ROLES = ['jian_biao_shi', 'xiao_hu_shi'];
+const INFO_ROLES = ['jian_biao_shi', 'xiao_hu_shi', 'mu_la_la', 'hua_fang_gu_niang', 'hou_zi', 'xiao_san'];
+
+// 人数配置表（从 roles.js 同步）
+const PLAYER_CONFIG = {
+  5:  { pure: 3, simp: 0, teaist: 1, scum: 1 },
+  6:  { pure: 3, simp: 1, teaist: 1, scum: 1 },
+  7:  { pure: 4, simp: 1, teaist: 1, scum: 1 },
+  8:  { pure: 5, simp: 1, teaist: 1, scum: 1 },
+  9:  { pure: 5, simp: 1, teaist: 2, scum: 1 },
+  10: { pure: 5, simp: 2, teaist: 1, scum: 2 },
+  11: { pure: 6, simp: 2, teaist: 1, scum: 2 },
+  12: { pure: 6, simp: 2, teaist: 2, scum: 2 },
+  13: { pure: 7, simp: 2, teaist: 2, scum: 2 },
+  14: { pure: 7, simp: 3, teaist: 2, scum: 2 },
+  15: { pure: 8, simp: 3, teaist: 2, scum: 2 },
+};
+
+const ROLE_POOL = {
+  scum: ['hiv', 'fu_sheng_shi'],
+  teaist: ['zao_yao_jing', 'miao_nan', 'zuo_jing'],
+  simp: ['ji_nv', 'gai_zhuang_che', 'gou_zi', 'side'],
+  pure: ['jian_biao_shi', 'xiao_hu_shi', 'ji_rou_meng', 'mu_la_la', 'hou_zi', 'hua_fang_gu_niang', 'cai_zhuang_mu', 'cu_kou', 'gang_tie_zhi_nan', 'xiao_san', 'bao_zha_ling'],
+};
+
+function assignRoles(playerCount) {
+  const config = PLAYER_CONFIG[playerCount];
+  if (!config) throw new Error(`不支持 ${playerCount} 人游戏`);
+  const selected = [];
+  for (const faction of ['scum', 'teaist', 'simp', 'pure']) {
+    const needed = config[faction];
+    const pool = [...ROLE_POOL[faction]];
+    if (faction === 'scum') {
+      selected.push('hiv');
+      pool.splice(pool.indexOf('hiv'), 1);
+      for (let i = 1; i < needed; i++) selected.push(pool.shift());
+    } else {
+      for (let i = 0; i < needed && pool.length > 0; i++) selected.push(pool.shift());
+    }
+  }
+  return shuffle(selected);
+}
+
 const getSide = (roleId) => { const f = ROLES[roleId]?.faction; return (f === FACTION.PURE || f === FACTION.SIMP) ? 'good' : 'evil'; };
 const FACTION_NAMES = { pure: '清流派', simp: '恋爱脑', teaist: '茶艺师', scum: '渣王' };
 const SIDE_NAMES = { good: '好人阵营', evil: '恶方阵营' };
@@ -50,8 +117,10 @@ const game = {
   dayNumber: 0,
   phase: 'lobby',
   lastGuardTarget: null,
+  fuShengShiCooldown: false,
   datingChoices: {},
-  pendingActions: new Map(), // playerId -> resolve function
+  pendingActions: new Map(),
+  earlyEvents: new Map(), // 缓存在 pending 注册前到达的客户端事件
 };
 
 // ============ WebSocket ============
@@ -94,8 +163,8 @@ async function main() {
   });
   game.roomId = room.id;
 
-  // 2. 添加 4 个 bot
-  for (let i = 0; i < 4; i++) {
+  // 2. 添加 N 个 bot
+  for (let i = 0; i < NUM_BOTS; i++) {
     const botId = `bot-${i}-${Date.now().toString(36)}`;
     await supaFetch('players', {
       method: 'POST',
@@ -107,32 +176,30 @@ async function main() {
   console.log('\n🎪 夜店钟楼 - 游戏服务器');
   console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
   console.log(`🔑 房间码: ${game.roomCode}`);
-  console.log('🤖 张飞、貂蝉、吕布、孙尚香 已就位');
-  console.log('⏳ 等待真人玩家加入...');
+  console.log(`🤖 ${BOT_NAMES.join('、')} 已就位 (${NUM_BOTS} bot)`);
+  console.log(`⏳ 等待 ${HUMANS_NEEDED} 名真人玩家加入... (总${TOTAL_PLAYERS}人局)`);
   console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
 
   // 3. 连接 WebSocket
   connectWS();
 
-  // 4. 轮询数据库检测真人玩家加入（不依赖 WebSocket broadcast）
-  const pollForHuman = setInterval(async () => {
-    if (game.humanPlayerId) { clearInterval(pollForHuman); return; }
+  // 4. 轮询数据库检测真人玩家加入
+  const pollForHumans = setInterval(async () => {
     try {
       const players = await supaFetch(`players?room_id=eq.${game.roomId}&order=seat_index`);
-      const newHuman = players.find(p => !p.player_id.startsWith('bot-'));
-      if (newHuman && !game.players.find(pp => pp.id === newHuman.player_id)) {
+      for (const p of players) {
+        if (p.player_id.startsWith('bot-')) continue;
+        if (game.players.find(pp => pp.id === p.player_id)) continue;
         game.players.push({
-          id: newHuman.player_id, name: newHuman.name, roleId: null,
-          alive: true, infected: false, isBot: false, seatIndex: newHuman.seat_index,
+          id: p.player_id, name: p.name, roleId: null,
+          alive: true, infected: false, isBot: false, seatIndex: p.seat_index,
         });
-        game.humanPlayerId = newHuman.player_id;
-        log(`✅ 真人玩家 "${newHuman.name}" 加入！(从数据库检测到)`);
-        clearInterval(pollForHuman);
-
-        if (game.players.length >= 5) {
-          log('🎮 5人到齐！3秒后自动开始...');
-          setTimeout(() => startGame(), 3000);
-        }
+        log(`✅ 真人玩家 "${p.name}" 加入！(${game.players.length}/${TOTAL_PLAYERS})`);
+      }
+      if (game.players.length >= TOTAL_PLAYERS && game.phase === 'lobby') {
+        clearInterval(pollForHumans);
+        log(`🎮 ${TOTAL_PLAYERS}人到齐！3秒后自动开始...`);
+        setTimeout(() => startGame(), 3000);
       }
     } catch (e) {}
   }, 2000);
@@ -166,12 +233,10 @@ function handleClientEvent(event, payload) {
     case 'player_joined': {
       if (game.players.find(p => p.id === payload.id)) return;
       game.players.push({ id: payload.id, name: payload.name, roleId: null, alive: true, infected: false, isBot: false, seatIndex: payload.seatIndex || 0 });
-      game.humanPlayerId = payload.id;
-      log(`✅ 真人玩家 "${payload.name}" 加入！(共${game.players.length}人)`);
+      log(`✅ 真人玩家 "${payload.name}" 加入！(${game.players.length}/${TOTAL_PLAYERS})`);
 
-      // 5人到齐，3秒后自动开始
-      if (game.players.length >= 5) {
-        log('🎮 5人到齐！3秒后自动开始...');
+      if (game.players.length >= TOTAL_PLAYERS && game.phase === 'lobby') {
+        log(`🎮 ${TOTAL_PLAYERS}人到齐！3秒后自动开始...`);
         setTimeout(() => startGame(), 3000);
       }
       break;
@@ -180,8 +245,8 @@ function handleClientEvent(event, payload) {
     case 'request_start': {
       // 真人房主从浏览器触发开始
       if (game.phase !== 'lobby') return;
-      if (game.players.length < 5) {
-        log(`⚠️ 收到开始请求但人数不足 (${game.players.length}/5)`);
+      if (game.players.length < TOTAL_PLAYERS) {
+        log(`⚠️ 收到开始请求但人数不足 (${game.players.length}/${TOTAL_PLAYERS})`);
         return;
       }
       log('🎮 收到房主开始请求，启动游戏...');
@@ -203,16 +268,22 @@ function handleClientEvent(event, payload) {
       if (resolve) {
         resolve(payload.targets);
         game.pendingActions.delete(payload.playerId);
+      } else {
+        // 缓存早到的事件
+        game.earlyEvents.set(payload.playerId, payload.targets);
       }
       break;
     }
 
     case 'vote_cast': {
       if (!payload.playerId) return;
-      const resolve = game.pendingActions.get('vote_' + payload.playerId);
+      const key = 'vote_' + payload.playerId;
+      const resolve = game.pendingActions.get(key);
       if (resolve) {
         resolve(payload.inFavor);
-        game.pendingActions.delete('vote_' + payload.playerId);
+        game.pendingActions.delete(key);
+      } else {
+        game.earlyEvents.set(key, payload.inFavor);
       }
       break;
     }
@@ -221,8 +292,8 @@ function handleClientEvent(event, payload) {
 
 // ============ 游戏流程 ============
 async function startGame() {
-  log('\n🎲 分配角色...');
-  const roles = shuffle([...FIVE_PLAYER_ROLES]);
+  log(`\n🎲 分配角色 (${game.players.length}人局)...`);
+  const roles = assignRoles(game.players.length);
 
   game.players.forEach((p, i) => {
     p.roleId = roles[i];
@@ -346,8 +417,11 @@ async function processNightAfterDating() {
 
   let guardTarget = null;
   let hivKillTarget = null;
+  let fuShengShiKillTarget = null;
   let hivBlocked = false;
   let zaoYaoTarget = null;
+  let miaoNanInfections = [];
+  let xioaSanQuery = null;
 
   // 按 nightOrder 排序处理角色
   const actionOrder = alive
@@ -361,14 +435,17 @@ async function processNightAfterDating() {
 
     if (player.isBot) {
       // Bot 随机选目标
-      await sleep(500);
+      await sleep(300);
       if (role.id === 'ji_rou_meng') {
         const goodOthers = others.filter(o => o.id !== game.lastGuardTarget);
         targets = goodOthers.length > 0 ? [pick(goodOthers).id] : [pick(others).id];
+      } else if (role.mechanic === 'select_two') {
+        const shuffled = shuffle(others);
+        targets = [shuffled[0].id, shuffled[1]?.id || shuffled[0].id];
       } else {
         targets = [pick(others).id];
       }
-      log(`   🤖 ${player.name}(${role.name}) 行动 → ${getPlayerName(targets[0])}`);
+      log(`   🤖 ${player.name}(${role.name}) 行动 → ${targets.map(t => getPlayerName(t)).join(', ')}`);
     } else {
       // 真人玩家
       sendToPlayer(player.id, 'night_action_prompt', {
@@ -390,6 +467,7 @@ async function processNightAfterDating() {
     }
 
     // 结算行动
+    const isJammed = zaoYaoTarget === player.id && INFO_ROLES.includes(role.id);
     switch (role.id) {
       case 'zao_yao_jing':
         zaoYaoTarget = targets[0];
@@ -401,25 +479,61 @@ async function processNightAfterDating() {
       case 'hiv':
         hivKillTarget = targets[0];
         break;
+      case 'fu_sheng_shi':
+        if (!game.fuShengShiCooldown) { fuShengShiKillTarget = targets[0]; game.fuShengShiCooldown = true; }
+        else { game.fuShengShiCooldown = false; addMsg(player.id, '⛓️ 冷却中，本夜无法行动'); }
+        break;
+      case 'miao_nan': {
+        const t = getPlayer(targets[0]);
+        if (t && !t.infected) { t.infected = true; miaoNanInfections.push(t.id); }
+        break;
+      }
       case 'jian_biao_shi': {
         const t = getPlayer(targets[0]);
         const tRole = ROLES[t.roleId];
         let tags = [...tRole.tags];
-        if (zaoYaoTarget === player.id && INFO_ROLES.includes(role.id)) {
-          tags = [pick(Object.values(TAGS)), pick(Object.values(TAGS))];
-        }
-        addMsg(player.id, `🔍 你翻了 ${t.name} 的相册：「${tags[0]}」「${tags[1]}」`);
+        if (isJammed) tags = [pick(Object.values(TAGS)), pick(Object.values(TAGS))];
+        addMsg(player.id, `🔍 你翻了 ${t.name} 的相册：「${tags[0]}」「${tags[1] || tags[0]}」`);
         break;
       }
       case 'xiao_hu_shi': {
         const t = getPlayer(targets[0]);
         let result = t.infected ? '阳性 🔴' : '阴性 🟢';
-        if (zaoYaoTarget === player.id && INFO_ROLES.includes(role.id)) {
-          result = t.infected ? '阴性 🟢' : '阳性 🔴';
-        }
+        if (isJammed) result = t.infected ? '阴性 🟢' : '阳性 🔴';
         addMsg(player.id, `💉 ${t.name} 的检测报告：${result}`);
         break;
       }
+      case 'mu_la_la': {
+        const t1 = getPlayer(targets[0]), t2 = getPlayer(targets[1] || targets[0]);
+        let hasEvil = getSide(t1.roleId) === 'evil' || getSide(t2.roleId) === 'evil';
+        if (isJammed) hasEvil = !hasEvil;
+        addMsg(player.id, `👩‍❤️‍👩 ${t1.name} 和 ${t2.name} 中${hasEvil ? '至少有1人是恶方' : '都不是恶方'}`);
+        break;
+      }
+      case 'hua_fang_gu_niang': {
+        const t = getPlayer(targets[0]);
+        const idx = alive.findIndex(a => a.id === t.id);
+        const neighbors = [alive[(idx - 1 + alive.length) % alive.length], t, alive[(idx + 1) % alive.length]];
+        let infected = neighbors.filter(n => n.infected).length;
+        if (isJammed) infected = Math.min(3, 3 - infected);
+        addMsg(player.id, `🌸 ${t.name} 周围3人中有 ${infected} 人感染`);
+        break;
+      }
+      case 'hou_zi': {
+        const t = getPlayer(targets[0]);
+        const dated = game.datingChoices[t.id] && game.datingChoices[t.id] !== 'none';
+        let msg = dated ? '今晚有约' : '今晚没约';
+        if (isJammed) msg = dated ? '今晚没约' : '今晚有约';
+        addMsg(player.id, `🐒 ${t.name} ${msg}`);
+        break;
+      }
+      case 'xiao_san': {
+        const t = getPlayer(targets[0]);
+        // 配对结果要等后面算，先记下来
+        xioaSanQuery = { playerId: player.id, targetId: t.id, jammed: isJammed };
+        break;
+      }
+      // 被动角色（无夜间操作）: cai_zhuang_mu, gang_tie_zhi_nan, bao_zha_ling 等不进入这里
     }
   }
 
@@ -454,10 +568,27 @@ async function processNightAfterDating() {
     addMsg(b, `🌹 约会收获：对方标签「${ra.tags[Math.floor(Math.random() * ra.tags.length)]}」`);
   }
 
+  // 小三查询（配对后结算）
+  if (xioaSanQuery) {
+    const paired = pairings.find(([a, b]) => a === xioaSanQuery.targetId || b === xioaSanQuery.targetId);
+    let msg;
+    if (paired) {
+      const partner = paired[0] === xioaSanQuery.targetId ? paired[1] : paired[0];
+      msg = `💔 ${getPlayerName(xioaSanQuery.targetId)} 今晚和 ${getPlayerName(partner)} 配对了`;
+    } else {
+      msg = `💔 ${getPlayerName(xioaSanQuery.targetId)} 今晚没有配对`;
+    }
+    if (xioaSanQuery.jammed) msg = `💔 ${getPlayerName(xioaSanQuery.targetId)} 的情况看不清（信息被干扰）`;
+    addMsg(xioaSanQuery.playerId, msg);
+  }
+
   // 死亡结算
   const deaths = [];
   if (hivKillTarget && hivKillTarget !== guardTarget && !hivBlocked) {
     deaths.push(hivKillTarget);
+  }
+  if (fuShengShiKillTarget && fuShengShiKillTarget !== guardTarget) {
+    if (!deaths.includes(fuShengShiKillTarget)) deaths.push(fuShengShiKillTarget);
   }
 
   for (const pid of deaths) {
@@ -505,9 +636,9 @@ async function runDay(deaths, newInfections) {
     alivePlayers: game.players.filter(p => p.alive).map(p => ({ id: p.id, name: p.name, alive: p.alive })),
   });
 
-  // 白天讨论 5 秒
-  log('   💬 白天讨论中 (5秒)...');
-  await sleep(5000);
+  // 白天讨论 2 秒
+  log('   💬 白天讨论中 (2秒)...');
+  await sleep(2000);
 
   // 投票：随机提名一个人
   const alive = game.players.filter(p => p.alive);
@@ -639,6 +770,12 @@ function endGame(win) {
 
 // ============ 等待玩家操作 ============
 function waitForAction(playerId, timeout) {
+  // 检查是否已有缓存的早到事件
+  if (game.earlyEvents.has(playerId)) {
+    const val = game.earlyEvents.get(playerId);
+    game.earlyEvents.delete(playerId);
+    return Promise.resolve(val);
+  }
   return new Promise((resolve) => {
     game.pendingActions.set(playerId, resolve);
     setTimeout(() => {
@@ -651,10 +788,16 @@ function waitForAction(playerId, timeout) {
 }
 
 function waitForVote(playerId, timeout) {
+  const key = 'vote_' + playerId;
+  // 检查缓存
+  if (game.earlyEvents.has(key)) {
+    const val = game.earlyEvents.get(key);
+    game.earlyEvents.delete(key);
+    return Promise.resolve(val);
+  }
   return new Promise((resolve) => {
-    game.pendingActions.set('vote_' + playerId, resolve);
+    game.pendingActions.set(key, resolve);
     setTimeout(() => {
-      const key = 'vote_' + playerId;
       if (game.pendingActions.has(key)) {
         game.pendingActions.delete(key);
         resolve(null);
@@ -679,8 +822,14 @@ function describeSkill(roleId) {
     jian_biao_shi: '每夜选1人，查看其行为标签（翻他手机相册）',
     xiao_hu_shi: '每夜选1人，查看其是否感染（偷偷做检测）',
     ji_rou_meng: '每夜选1人守护，免疫杀害和感染',
+    mu_la_la: '每夜选2人，查验其中是否有恶方',
+    hua_fang_gu_niang: '每夜选1人，查看其周围3人的感染数量',
+    hou_zi: '每夜选1人，查看其是否发起约会',
+    xiao_san: '每夜选1人，查看其与谁配对成功',
     zao_yao_jing: '每夜选1人，若其是信息角色则信息被篡改',
+    miao_nan: '每夜选1人，使其感染（目标不知情）',
     hiv: '每夜选1人杀害，自身永久携带感染',
+    fu_sheng_shi: '隔一夜可杀害1人（冷却机制）',
   };
   return skills[roleId] || '';
 }
