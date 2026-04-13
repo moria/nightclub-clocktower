@@ -8,6 +8,7 @@ const WebSocket = require('ws');
 const SUPABASE_URL = 'https://nxeybszulisostkazlkc.supabase.co';
 const ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im54ZXlic3p1bGlzb3N0a2F6bGtjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYwNDA3NTMsImV4cCI6MjA5MTYxNjc1M30.xGtEfSMKvglwXYZg4mOR_pyIMpjAFQSxUUR6h01P5Xo';
 
+const args = process.argv.slice(2);
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 const log = (msg) => console.log(msg);
 
@@ -177,7 +178,7 @@ async function runTest(totalPlayers, numBots) {
 
     // 4. 等待游戏开始和结束
     log(`  [3] 等待游戏完成...`);
-    const maxWait = totalPlayers >= 10 ? 300000 : 180000; // 10人5分钟, 其余3分钟
+    const maxWait = totalPlayers >= 12 ? 420000 : totalPlayers >= 9 ? 300000 : 180000;
     const start = Date.now();
     let gameOver = false;
     while (Date.now() - start < maxWait) {
@@ -240,11 +241,12 @@ async function main() {
   log('\n🧪 夜店钟楼 — 多人数端到端测试');
   log('━'.repeat(60));
 
-  const tests = [
-    { total: 5,  bots: 4 },   // 5人: 4 bot + 1 human
-    { total: 7,  bots: 5 },   // 7人: 5 bot + 2 humans
-    { total: 10, bots: 7 },   // 10人: 7 bot + 3 humans
-  ];
+  // 从 CLI 参数读取要测试的人数，默认全覆盖
+  const argSizes = args.filter(a => !isNaN(a)).map(Number);
+  const tests = (argSizes.length > 0 ? argSizes : [5, 6, 7, 8, 9, 10, 12, 15]).map(n => ({
+    total: n,
+    bots: Math.max(n - Math.ceil(n / 5), n - 3), // 留 1-3 个真人位
+  }));
 
   let totalPassed = 0, totalFailed = 0;
 
