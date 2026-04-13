@@ -1,8 +1,12 @@
-// 夜店钟楼 - 薄客户端（纯UI + 广播通信，游戏逻辑由服务端驱动）
+// 夜店钟楼 - 薄客户端（纯UI + 广播通信）
+// 房主快速开始时，由 HostEngine 在浏览器内驱动游戏
 
 import { ROLES, FACTION_INFO } from './roles.js';
 import { store, PHASE } from './game-state.js';
 import { supabase } from './supabase-client.js';
+import { HostEngine } from './host-engine.js';
+
+let hostEngine = null;
 
 // ============ DOM 工具 ============
 const $ = (sel) => document.querySelector(sel);
@@ -112,13 +116,26 @@ function bindEvents() {
     requestStart(players.length);
   });
 
-  // 快速开始 — 不足的补 AI
-  $('#btn-quick-start')?.addEventListener('click', () => {
+  // 快速开始 — 房主浏览器内置引擎，直接补AI并开始
+  $('#btn-quick-start')?.addEventListener('click', async () => {
     if (!store.isHost()) return;
     const currentCount = store.state.players.length;
     const targetCount = store.state._selectedTotal || Math.max(5, currentCount);
     if (targetCount < 5 || targetCount > 15) return alert('游戏人数需要5-15人');
-    requestStart(targetCount);
+
+    const quickBtn = $('#btn-quick-start');
+    const startBtn = $('#btn-start');
+    if (quickBtn) { quickBtn.textContent = '⏳ 正在补位...'; quickBtn.disabled = true; }
+    if (startBtn) startBtn.disabled = true;
+
+    hostEngine = new HostEngine();
+    try {
+      await hostEngine.start(targetCount, (msg) => console.log(msg));
+    } catch (e) {
+      console.error('游戏引擎错误:', e);
+      alert('游戏启动失败: ' + e.message);
+      if (quickBtn) { quickBtn.textContent = '⚡ 重试'; quickBtn.disabled = false; }
+    }
   });
 
   // 新游戏
@@ -229,6 +246,8 @@ function subscribeRoom(code) {
 
     '*': (event, payload) => {
       console.log(`[Room] ${event}:`, payload);
+      // 转发给房主引擎（如果在运行）
+      if (hostEngine?.running) hostEngine.handleEvent(event, payload);
     },
   });
 }
