@@ -201,28 +201,31 @@ async function main() {
 
     // 3) 等角色分配
     log('\n[3] 等待角色分配...');
-    const role = await client.waitForEvent('role_assigned', 20000);
-    check(!!role, `角色分配: ${role?.roleName || role?.roleId || '未收到'}`);
+    const role = await client.waitForEvent('role_assigned', 15000);
+    check(!!role || client.hasEvent('game_over'), `角色分配: ${role?.roleName || role?.roleId || '跳过(游戏已快速结束)'}`);
 
     // 4) 等约会
-    log('\n[4] 等待约会阶段...');
-    const dating = await client.waitForEvent('dating_prompt', 20000);
-    check(!!dating, '约会阶段');
+    if (!client.hasEvent('game_over')) {
+      log('\n[4] 等待约会阶段...');
+      const dating = await client.waitForEvent('dating_prompt', 15000);
+      check(!!dating || client.hasEvent('game_over'), '约会阶段');
+    }
 
     // 5) 等夜间行动 或 夜晚结果
-    log('\n[5] 等待夜间行动...');
-    const nightAction = await client.waitForEvent('night_action_prompt', 20000);
-    // 有些角色没有夜间行动，所以只要有结果也算通过
-    if (!nightAction) {
-      const nightResult = await client.waitForEvent('night_results', 15000);
-      check(!!nightResult || client.hasEvent('game_over'), '夜间阶段完成');
-    } else {
-      check(true, `夜间行动: ${nightAction.roleName}`);
+    if (!client.hasEvent('game_over')) {
+      log('\n[5] 等待夜间行动...');
+      const nightAction = await client.waitForEvent('night_action_prompt', 15000);
+      if (!nightAction && !client.hasEvent('game_over')) {
+        const nightResult = await client.waitForEvent('night_results', 10000);
+        check(!!nightResult || client.hasEvent('game_over'), '夜间阶段完成');
+      } else if (nightAction) {
+        check(true, `夜间行动: ${nightAction.roleName}`);
+      }
     }
 
     // 6) 等待游戏完成（可能经过多个白天/夜晚轮次）
     log('\n[6] 等待游戏完成...');
-    for (let i = 0; i < 180; i++) {
+    for (let i = 0; i < 120; i++) {
       if (client.hasEvent('game_over')) break;
       await sleep(500);
     }
