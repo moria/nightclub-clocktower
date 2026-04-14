@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>夜店钟楼 - 不正经的血染钟楼</title>
-  <link rel="stylesheet" href="css/style.css?v=20260415">
+  <link rel="stylesheet" href="css/style.css?v=20260416">
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
@@ -129,6 +129,26 @@
     </div>
   </div>
 
-  <script type="module" src="js/app.js?v=20260415"></script>
+  <!-- ===== Debug 面板（隐藏，连按标题5次或 #debug 打开） ===== -->
+  <div id="debug-panel" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.95);color:#0f0;font-family:monospace;font-size:12px;overflow:hidden;flex-direction:column">
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;border-bottom:1px solid #333;flex-shrink:0">
+      <span style="font-size:14px;font-weight:bold">Debug Logs (<span id="debug-count">0</span>)</span>
+      <div style="display:flex;gap:8px">
+        <select id="debug-filter" style="background:#111;color:#0f0;border:1px solid #333;padding:2px 6px;font-size:12px">
+          <option value="all">All</option>
+          <option value="error">Error</option>
+          <option value="warn">Warn</option>
+          <option value="info">Info</option>
+          <option value="event">Event</option>
+        </select>
+        <button onclick="window._copyDebugLogs()" style="background:#222;color:#0f0;border:1px solid #333;padding:2px 8px;cursor:pointer">Copy</button>
+        <button onclick="window._clearDebugLogs()" style="background:#222;color:#f00;border:1px solid #333;padding:2px 8px;cursor:pointer">Clear</button>
+        <button onclick="window._closeDebug()" style="background:#222;color:#fff;border:1px solid #333;padding:2px 8px;cursor:pointer;font-weight:bold">X</button>
+      </div>
+    </div>
+    <div id="debug-log-list" style="flex:1;overflow-y:auto;padding:8px 12px"></div>
+  </div>
+
+  <script type="module" src="js/app.js?v=20260416"></script>
 </body>
 </html>

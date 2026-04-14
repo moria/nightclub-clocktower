@@ -5,6 +5,7 @@ import { ROLES, FACTION_INFO } from './roles.js';
 import { store, PHASE } from './game-state.js';
 import { supabase } from './supabase-client.js';
 import { HostEngine } from './host-engine.js';
+import { clientLog, initLogger, LOG_BUFFER } from './logger.js';
 
 let hostEngine = null;
 
@@ -25,6 +26,19 @@ function html(el, content) {
 
 // ============ 初始化 ============
 document.addEventListener('DOMContentLoaded', () => {
+  // 初始化日志系统
+  initLogger(store);
+
+  // 全局错误捕获
+  window.addEventListener('error', (e) => {
+    clientLog('error', 'js_error', e.message, { filename: e.filename, line: e.lineno, col: e.colno });
+  });
+  window.addEventListener('unhandledrejection', (e) => {
+    clientLog('error', 'js_error', 'Unhandled rejection: ' + (e.reason?.message || e.reason));
+  });
+
+  clientLog('info', 'ui', 'App initialized');
+
   // URL hash 清除缓存
   if (location.hash === '#clear') {
     store.reset();
@@ -85,6 +99,7 @@ function bindEvents() {
       show('view-room');
       renderRoom();
     } catch (e) {
+      clientLog('error', 'network', 'Create room failed', { error: e.message });
       console.error(e);
       alert('创建房间失败: ' + e.message);
     }
@@ -118,6 +133,7 @@ function bindEvents() {
       show('view-room');
       renderRoom();
     } catch (e) {
+      clientLog('error', 'network', 'Join room failed', { error: e.message });
       console.error(e);
       alert('加入失败: ' + e.message);
     }
@@ -152,6 +168,7 @@ function bindEvents() {
     try {
       await hostEngine.start(targetCount, (msg) => console.log(msg));
     } catch (e) {
+      clientLog('error', 'game_event', 'Host engine start failed', { error: e.message });
       console.error('游戏引擎错误:', e);
       alert('游戏启动失败: ' + e.message);
       if (quickBtn) { quickBtn.textContent = '⚡ 重试'; quickBtn.disabled = false; }
@@ -174,6 +191,7 @@ function shouldIgnore(data) {
 
 /** 统一事件处理（WS回调和本地引擎共用） */
 function handleRoomEvent(event, data) {
+  clientLog('info', 'game_event', event, data);
   switch (event) {
     case 'player_joined':
       if (!store.state.players.find(p => p.id === data.id)) {
@@ -1072,3 +1090,77 @@ function closeRoleCard() {
 
 window._openRoleCard = () => openRoleCard();
 window._closeRoleCard = () => closeRoleCard();
+
+// ============ Debug 面板 ============
+
+let _debugTapCount = 0;
+let _debugTapTimer = null;
+
+// 连按标题 5 次打开 debug
+document.addEventListener('click', (e) => {
+  if (e.target.closest('h1') || e.target.closest('.header h2')) {
+    _debugTapCount++;
+    clearTimeout(_debugTapTimer);
+    _debugTapTimer = setTimeout(() => { _debugTapCount = 0; }, 2000);
+    if (_debugTapCount >= 5) {
+      _debugTapCount = 0;
+      window._openDebug();
+    }
+  }
+});
+
+// #debug hash 打开
+if (location.hash === '#debug') {
+  setTimeout(() => window._openDebug(), 500);
+}
+window.addEventListener('hashchange', () => {
+  if (location.hash === '#debug') window._openDebug();
+});
+
+const LEVEL_COLORS = { error: '#f44', warn: '#fa0', info: '#0f0', event: '#0af' };
+
+function renderDebugLogs() {
+  const panel = $('#debug-log-list');
+  const countEl = $('#debug-count');
+  const filterEl = $('#debug-filter');
+  if (!panel) return;
+
+  const filter = filterEl?.value || 'all';
+  const logs = filter === 'all' ? LOG_BUFFER : LOG_BUFFER.filter(l => l.level === filter);
+
+  countEl.textContent = logs.length;
+  panel.innerHTML = logs.slice().reverse().map(l => {
+    const color = LEVEL_COLORS[l.level] || '#0f0';
+    const time = l.time.split('T')[1]?.split('.')[0] || l.time;
+    const details = Object.keys(l.details).length > 0 ? ` ${JSON.stringify(l.details).substring(0, 120)}` : '';
+    return `<div style="color:${color};margin-bottom:2px;word-break:break-all"><span style="color:#888">${time}</span> [${l.level}] ${l.category}: ${l.message}${details}</div>`;
+  }).join('');
+}
+
+window._openDebug = () => {
+  const panel = $('#debug-panel');
+  if (panel) {
+    panel.style.display = 'flex';
+    renderDebugLogs();
+  }
+};
+
+window._closeDebug = () => {
+  const panel = $('#debug-panel');
+  if (panel) panel.style.display = 'none';
+};
+
+window._copyDebugLogs = () => {
+  const text = LOG_BUFFER.map(l => `${l.time} [${l.level}] ${l.category}: ${l.message} ${JSON.stringify(l.details)}`).join('\n');
+  navigator.clipboard?.writeText(text).then(() => alert('Copied!')).catch(() => {});
+};
+
+window._clearDebugLogs = () => {
+  LOG_BUFFER.length = 0;
+  renderDebugLogs();
+};
+
+// 过滤器联动
+document.addEventListener('change', (e) => {
+  if (e.target.id === 'debug-filter') renderDebugLogs();
+});

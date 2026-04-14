@@ -5,6 +5,7 @@
 import { ROLES, FACTION, FACTION_INFO, PLAYER_CONFIG, ROLE_POOL, INFO_ROLES, TAGS, assignRoles, getSide } from './roles.js';
 import { store, PHASE } from './game-state.js';
 import { supabase } from './supabase-client.js';
+import { clientLog } from './logger.js';
 
 const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
 const shuffle = (arr) => { const a = [...arr]; for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
@@ -45,6 +46,10 @@ export class HostEngine {
   }
 
   broadcast(event, payload) {
+    // 关键事件记录远程日志
+    if (['phase_change', 'game_over', 'execution', 'acquittal'].includes(event)) {
+      clientLog('event', 'game_event', `[host] ${event}`, payload);
+    }
     supabase.broadcastToRoom(store.state.roomCode, event, payload);
     // 同时直接触发本地 handler（不依赖 WS 回程）
     if (this._localHandler) this._localHandler(event, payload);
